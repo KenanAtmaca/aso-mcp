@@ -1,0 +1,49 @@
+{
+  "name": "aso-mcp",
+  "version": "1.0.0",
+  "description": "App Store Optimization MCP Server for AI Assistants",
+  "type": "module",
+  "bin": {
+    "aso-mcp": "./build/server.js"
+  },
+  "scripts": {
+    "dev": "tsx src/server.ts",
+    "build": "tsc && chmod 755 build/server.js",
+    "start": "node build/server.js",
+    "inspect": "npx @modelcontextprotocol/inspector tsx src/server.ts",
+    "prepare": "npm run build"
+  },
+  "files": [
+    "build",
+    "README.md",
+    "LICENSE"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kenanatmaca/aso-mcp"
+  },
+  "homepage": "https://github.com/kenanatmaca/aso-mcp#readme",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "latest",
+    "app-store-scraper": "^0.18.0",
+    "aso": "^1.1.1",
+    "better-sqlite3": "^12.6.2",
+    "dotenv": "^16.4.0",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.0",
+    "@types/node": "^22.0.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.7.0"
+  },
+  "keywords": [
+    "mcp",
+    "aso",
+    "app-store-optimization",
+    "ios",
+    "keyword-research"
+  ],
+  "license": "MIT",
+  "author": "Kenan Atmaca"
+}

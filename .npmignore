@@ -1,0 +1,10 @@
+src/
+data/
+test.ts
+test-phase3.ts
+tsconfig.json
+.env
+.env.example
+.claude/
+.gitignore
+*.db
