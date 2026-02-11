@@ -119,6 +119,35 @@ export async function suggestKeywords(
 }
 
 /**
+ * Score multiple keywords in parallel with a concurrency limit.
+ * Returns results in the same order as input keywords.
+ */
+export async function batchGetScores(
+  keywords: string[],
+  country: string = "tr",
+  concurrency: number = 5
+): Promise<{ keyword: string; traffic: number; difficulty: number }[]> {
+  const results: { keyword: string; traffic: number; difficulty: number }[] = [];
+
+  for (let i = 0; i < keywords.length; i += concurrency) {
+    const batch = keywords.slice(i, i + concurrency);
+    const batchResults = await Promise.all(
+      batch.map(async (kw) => {
+        try {
+          const scores = await getScores(kw, country);
+          return { keyword: kw, traffic: scores.traffic, difficulty: scores.difficulty };
+        } catch {
+          return { keyword: kw, traffic: 0, difficulty: 0 };
+        }
+      })
+    );
+    results.push(...batchResults);
+  }
+
+  return results;
+}
+
+/**
  * When the aso package is unavailable, generate keyword suggestions via app-store-scraper.
  * Sends keywords from the app's title + description to App Store suggest.
  */

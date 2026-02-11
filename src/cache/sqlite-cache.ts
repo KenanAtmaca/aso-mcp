@@ -1,11 +1,12 @@
 import Database from "better-sqlite3";
 import path from "path";
+import os from "os";
 import fs from "fs";
 
 let db: Database.Database;
 
 export function initCache(): void {
-  const dataDir = path.join(process.cwd(), "data");
+  const dataDir = path.join(os.homedir(), ".aso-mcp");
   if (!fs.existsSync(dataDir)) {
     fs.mkdirSync(dataDir, { recursive: true });
   }
@@ -24,7 +25,7 @@ export function initCache(): void {
     )
   `);
 
-  // Expired entry temizligi
+  // Clean up expired entries
   db.exec(`DELETE FROM cache WHERE expires_at < strftime('%s', 'now')`);
 }
 
@@ -56,6 +57,7 @@ export function clearCache(): void {
 export function getCacheStats(): {
   totalEntries: number;
   expiredEntries: number;
+  dbPath: string;
 } {
   const total = db
     .prepare("SELECT COUNT(*) as count FROM cache")
@@ -66,5 +68,9 @@ export function getCacheStats(): {
     )
     .get() as { count: number };
 
-  return { totalEntries: total.count, expiredEntries: expired.count };
+  return {
+    totalEntries: total.count,
+    expiredEntries: expired.count,
+    dbPath: path.join(os.homedir(), ".aso-mcp", "cache.db"),
+  };
 }

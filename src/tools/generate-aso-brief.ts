@@ -1,7 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { searchApps, getAppDetails, getSuggestions } from "../data-sources/app-store.js";
-import { getScores } from "../data-sources/aso-scoring.js";
+import { getScores, batchGetScores } from "../data-sources/aso-scoring.js";
 import { getFromCache, setCache } from "../cache/sqlite-cache.js";
 import { CACHE_TTL, CHAR_LIMITS } from "../utils/constants.js";
 import { getCountryName } from "../utils/localization.js";
@@ -103,7 +103,14 @@ export function registerGenerateAsoBrief(server: McpServer) {
           }
         }
 
-        // Score keywords
+        // Score keywords (in parallel)
+        const poolEntries = [...keywordPool.entries()].slice(0, 40);
+        const batchScores = await batchGetScores(
+          poolEntries.map(([kw]) => kw),
+          primaryCountry
+        );
+        const scoreMap = new Map(batchScores.map((s) => [s.keyword, s]));
+
         const scoredPool: {
           keyword: string;
           traffic: number;
@@ -112,27 +119,16 @@ export function registerGenerateAsoBrief(server: McpServer) {
           source: string;
         }[] = [];
 
-        const poolEntries = [...keywordPool.entries()].slice(0, 40);
         for (const [kw, data] of poolEntries) {
-          try {
-            const scores = await getScores(kw, primaryCountry);
-            const opp = calculateOpportunityScore(scores.traffic, scores.difficulty);
-            scoredPool.push({
-              keyword: kw,
-              traffic: scores.traffic,
-              difficulty: scores.difficulty,
-              opportunityScore: Math.round(opp * 10) / 10,
-              source: data.source,
-            });
-          } catch {
-            scoredPool.push({
-              keyword: kw,
-              traffic: 0,
-              difficulty: 0,
-              opportunityScore: 5,
-              source: data.source,
-            });
-          }
+          const scores = scoreMap.get(kw) || { traffic: 0, difficulty: 0 };
+          const opp = calculateOpportunityScore(scores.traffic, scores.difficulty);
+          scoredPool.push({
+            keyword: kw,
+            traffic: scores.traffic,
+            difficulty: scores.difficulty,
+            opportunityScore: Math.round(opp * 10) / 10,
+            source: data.source,
+          });
         }
 
         scoredPool.sort((a, b) => b.opportunityScore - a.opportunityScore);

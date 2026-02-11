@@ -1,7 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { suggestKeywords } from "../data-sources/aso-scoring.js";
-import { getScores } from "../data-sources/aso-scoring.js";
+import { suggestKeywords, batchGetScores } from "../data-sources/aso-scoring.js";
 import { getFromCache, setCache } from "../cache/sqlite-cache.js";
 import { CACHE_TTL } from "../utils/constants.js";
 
@@ -50,28 +49,15 @@ export function registerSuggestKeywords(server: McpServer) {
           }
         }
 
-        // Get scores for unique keywords
+        // Get scores for unique keywords (in parallel)
         const uniqueKeywords = [
           ...new Set(Object.values(allKeywords).flat()),
         ];
 
-        const scoredKeywords = [];
-        for (const kw of uniqueKeywords.slice(0, 30)) {
-          try {
-            const scores = await getScores(kw, country);
-            scoredKeywords.push({
-              keyword: kw,
-              traffic: scores.traffic,
-              difficulty: scores.difficulty,
-            });
-          } catch {
-            scoredKeywords.push({
-              keyword: kw,
-              traffic: 0,
-              difficulty: 0,
-            });
-          }
-        }
+        const scoredKeywords = await batchGetScores(
+          uniqueKeywords.slice(0, 30),
+          country
+        );
 
         // Sort by traffic
         scoredKeywords.sort((a, b) => b.traffic - a.traffic);

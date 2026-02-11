@@ -1,6 +1,7 @@
 node_modules/
 build/
-data/cache.db
+data/
 .env
-*.log
 .DS_Store
+.claude/
+*.log

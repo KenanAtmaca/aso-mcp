@@ -37,12 +37,21 @@
     "tsx": "^4.21.0",
     "typescript": "^5.7.0"
   },
+  "engines": {
+    "node": ">=22.0.0"
+  },
   "keywords": [
     "mcp",
+    "model-context-protocol",
     "aso",
     "app-store-optimization",
+    "app-store",
     "ios",
-    "keyword-research"
+    "keyword-research",
+    "competitor-analysis",
+    "seo",
+    "claude",
+    "ai-tools"
   ],
   "license": "MIT",
   "author": "Kenan Atmaca"

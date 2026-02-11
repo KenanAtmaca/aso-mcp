@@ -24,6 +24,9 @@ import { registerGetAsoReport } from "./tools/get-aso-report.js";
 import { registerDiscoverKeywords } from "./tools/discover-keywords.js";
 import { registerGenerateAsoBrief } from "./tools/generate-aso-brief.js";
 
+// Utility tools
+import { registerClearCache } from "./tools/clear-cache.js";
+
 import { initCache } from "./cache/sqlite-cache.js";
 
 dotenv.config();
@@ -55,6 +58,9 @@ registerGetAsoReport(server);
 // Register ASO Generation tools
 registerDiscoverKeywords(server);
 registerGenerateAsoBrief(server);
+
+// Register Utility tools
+registerClearCache(server);
 
 // Start server
 const transport = new StdioServerTransport();

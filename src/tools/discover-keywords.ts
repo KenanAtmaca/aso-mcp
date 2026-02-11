@@ -1,7 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { searchApps, getAppDetails, getSuggestions } from "../data-sources/app-store.js";
-import { getScores } from "../data-sources/aso-scoring.js";
+import { getScores, batchGetScores } from "../data-sources/aso-scoring.js";
 import { getFromCache, setCache } from "../cache/sqlite-cache.js";
 import { CACHE_TTL } from "../utils/constants.js";
 import {
@@ -128,10 +128,17 @@ export function registerDiscoverKeywords(server: McpServer) {
           }
         }
 
-        // ─── 6. Sort by frequency, score top keywords ───
+        // ─── 6. Sort by frequency, score top keywords (in parallel) ───
         const sortedKeywords = [...rawKeywords.entries()]
           .sort((a, b) => b[1].count - a[1].count)
           .slice(0, maxResults);
+
+        const batchScores = await batchGetScores(
+          sortedKeywords.map(([kw]) => kw),
+          country
+        );
+
+        const scoreMap = new Map(batchScores.map((s) => [s.keyword, s]));
 
         const scoredKeywords: {
           keyword: string;
@@ -144,39 +151,27 @@ export function registerDiscoverKeywords(server: McpServer) {
         }[] = [];
 
         for (const [kw, data] of sortedKeywords) {
-          try {
-            const scores = await getScores(kw, country);
-            const oppScore = calculateOpportunityScore(
-              scores.traffic,
-              scores.difficulty
-            );
+          const scores = scoreMap.get(kw) || { traffic: 0, difficulty: 0 };
+          const oppScore = calculateOpportunityScore(
+            scores.traffic,
+            scores.difficulty
+          );
 
-            let tier: string;
-            if (oppScore >= 7) tier = "A — High opportunity";
-            else if (oppScore >= 5) tier = "B — Medium opportunity";
-            else if (oppScore >= 3) tier = "C — Low opportunity";
-            else tier = "D — Weak";
+          let tier: string;
+          if (oppScore >= 7) tier = "A — High opportunity";
+          else if (oppScore >= 5) tier = "B — Medium opportunity";
+          else if (oppScore >= 3) tier = "C — Low opportunity";
+          else tier = "D — Weak";
 
-            scoredKeywords.push({
-              keyword: kw,
-              traffic: scores.traffic,
-              difficulty: scores.difficulty,
-              opportunityScore: Math.round(oppScore * 10) / 10,
-              frequency: data.count,
-              sources: data.sources.slice(0, 3),
-              tier,
-            });
-          } catch {
-            scoredKeywords.push({
-              keyword: kw,
-              traffic: 0,
-              difficulty: 0,
-              opportunityScore: 5,
-              frequency: data.count,
-              sources: data.sources.slice(0, 3),
-              tier: "? — Score unavailable",
-            });
-          }
+          scoredKeywords.push({
+            keyword: kw,
+            traffic: scores.traffic,
+            difficulty: scores.difficulty,
+            opportunityScore: Math.round(oppScore * 10) / 10,
+            frequency: data.count,
+            sources: data.sources.slice(0, 3),
+            tier,
+          });
         }
 
         // Sort by opportunity

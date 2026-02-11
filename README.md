@@ -23,7 +23,7 @@ npm install -g aso-mcp
 
 ## Why aso-mcp?
 
-- **12 specialized ASO tools** — from keyword discovery to complete ASO briefs
+- **13 specialized ASO tools** — from keyword discovery to complete ASO briefs
 - **Real App Store data** — live search results, ratings, reviews, and suggestions
 - **Custom scoring engine** — proprietary algorithm independent of Apple Search Ads API issues
 - **No API key needed** — zero configuration, install and go
@@ -113,6 +113,12 @@ Any MCP-compatible client (ChatGPT, Cursor, Windsurf, etc.) can connect via stdi
 |------|-------------|
 | `discover_keywords` | Keyword discovery from scratch for a new app |
 | `generate_aso_brief` | Complete ASO brief with keyword pool, competitor patterns, and metadata suggestions |
+
+### Utility
+
+| Tool | Description |
+|------|-------------|
+| `clear_cache` | Clears the local data cache for fresh App Store results |
 
 ## Usage Examples
 

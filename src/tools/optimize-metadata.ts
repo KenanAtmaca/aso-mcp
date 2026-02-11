@@ -1,7 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { getAppDetails, searchApps } from "../data-sources/app-store.js";
-import { getScores } from "../data-sources/aso-scoring.js";
+import { batchGetScores } from "../data-sources/aso-scoring.js";
 import { getFromCache, setCache } from "../cache/sqlite-cache.js";
 import { CACHE_TTL, CHAR_LIMITS } from "../utils/constants.js";
 import { extractTitleKeywords } from "../data-sources/custom-scoring.js";
@@ -32,17 +32,17 @@ export function registerOptimizeMetadata(server: McpServer) {
       try {
         const app = await getAppDetails(appId, country);
 
-        // Get keyword scores
+        // Get keyword scores (in parallel)
         const keywordScores: Record<
           string,
           { traffic: number; difficulty: number }
         > = {};
-        for (const kw of targetKeywords.slice(0, 15)) {
-          try {
-            keywordScores[kw] = await getScores(kw, country);
-          } catch {
-            keywordScores[kw] = { traffic: 0, difficulty: 0 };
-          }
+        const batchResults = await batchGetScores(
+          targetKeywords.slice(0, 15),
+          country
+        );
+        for (const r of batchResults) {
+          keywordScores[r.keyword] = { traffic: r.traffic, difficulty: r.difficulty };
         }
 
         // Sort keywords by traffic

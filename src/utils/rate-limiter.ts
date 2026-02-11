@@ -23,7 +23,7 @@ export async function withRateLimit<T>(
     buckets.set(source, bucket);
   }
 
-  // Token'lari yenile
+  // Refill tokens
   const elapsed = now - bucket.lastRefill;
   const refillAmount =
     (elapsed / config.windowMs) * config.maxRequests;
@@ -33,7 +33,7 @@ export async function withRateLimit<T>(
   );
   bucket.lastRefill = now;
 
-  // Token yoksa bekle
+  // Wait if no tokens available
   if (bucket.tokens < 1) {
     const waitMs = ((1 - bucket.tokens) / config.maxRequests) * config.windowMs;
     await new Promise((resolve) => setTimeout(resolve, waitMs));

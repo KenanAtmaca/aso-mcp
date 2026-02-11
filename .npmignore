@@ -2,9 +2,14 @@ src/
 data/
 test.ts
 test-phase3.ts
+test-generation.ts
+test-existing-app.ts
 tsconfig.json
+CLAUDE.md
 .env
 .env.example
 .claude/
 .gitignore
+.DS_Store
 *.db
+*.log

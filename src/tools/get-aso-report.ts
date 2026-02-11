@@ -6,7 +6,7 @@ import {
   getReviews,
   getSimilarApps,
 } from "../data-sources/app-store.js";
-import { getScores } from "../data-sources/aso-scoring.js";
+import { batchGetScores } from "../data-sources/aso-scoring.js";
 import { getFromCache, setCache } from "../cache/sqlite-cache.js";
 import { CACHE_TTL, CHAR_LIMITS } from "../utils/constants.js";
 import {
@@ -46,20 +46,11 @@ export function registerGetAsoReport(server: McpServer) {
         const app = await getAppDetails(appId, country);
         const titleKeywords = extractTitleKeywords(app.title || "");
 
-        // 2. Title keyword scores
-        const keywordScores: {
-          keyword: string;
-          traffic: number;
-          difficulty: number;
-        }[] = [];
-        for (const kw of titleKeywords.slice(0, 10)) {
-          try {
-            const scores = await getScores(kw, country);
-            keywordScores.push({ keyword: kw, ...scores });
-          } catch {
-            keywordScores.push({ keyword: kw, traffic: 0, difficulty: 0 });
-          }
-        }
+        // 2. Title keyword scores (in parallel)
+        const keywordScores = await batchGetScores(
+          titleKeywords.slice(0, 10),
+          country
+        );
 
         // 3. Search by app name — competitors
         let competitorApps: any[] = [];
