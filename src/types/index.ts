@@ -95,3 +95,60 @@ export interface CacheEntry {
   expires_at: number;
   created_at: number;
 }
+
+// ─── App Store Connect Types ───
+
+export interface ConnectConfig {
+  issuerId: string;
+  apiKeyId: string;
+  privateKeyPath: string;
+}
+
+export interface ConnectAppInfo {
+  id: string;
+  bundleId: string;
+  name: string;
+  primaryLocale: string;
+  versionId: string | null;
+  versionState: string | null;
+}
+
+export interface ConnectLocalization {
+  locale: string;
+  subtitle: string | null;
+  subtitleLength: number;
+  keywords: string | null;
+  keywordsLength: number;
+  description: string | null;
+  descriptionLength: number;
+  promotionalText: string | null;
+  promotionalTextLength: number;
+  whatsNew: string | null;
+  whatsNewLength: number;
+  supportUrl: string | null;
+  marketingUrl: string | null;
+  appInfoLocalizationId: string | null;
+  versionLocalizationId: string | null;
+}
+
+export interface ConnectLocalizationSummary {
+  locale: string;
+  hasSubtitle: boolean;
+  hasKeywords: boolean;
+  hasDescription: boolean;
+  hasPromotionalText: boolean;
+  hasWhatsNew: boolean;
+  appInfoLocalizationId: string | null;
+  versionLocalizationId: string | null;
+}
+
+export interface ConnectMetadataUpdate {
+  name?: string;
+  subtitle?: string;
+  keywords?: string;
+  description?: string;
+  promotionalText?: string;
+  whatsNew?: string;
+  supportUrl?: string;
+  marketingUrl?: string;
+}

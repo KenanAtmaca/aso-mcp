@@ -24,6 +24,13 @@ import { registerGetAsoReport } from "./tools/get-aso-report.js";
 import { registerDiscoverKeywords } from "./tools/discover-keywords.js";
 import { registerGenerateAsoBrief } from "./tools/generate-aso-brief.js";
 
+// Phase 5: App Store Connect tools
+import { registerConnectSetup } from "./tools/connect-setup.js";
+import { registerConnectGetApp } from "./tools/connect-get-app.js";
+import { registerConnectGetMetadata } from "./tools/connect-get-metadata.js";
+import { registerConnectUpdateMetadata } from "./tools/connect-update-metadata.js";
+import { registerConnectListLocalizations } from "./tools/connect-list-localizations.js";
+
 // Utility tools
 import { registerClearCache } from "./tools/clear-cache.js";
 
@@ -58,6 +65,13 @@ registerGetAsoReport(server);
 // Register ASO Generation tools
 registerDiscoverKeywords(server);
 registerGenerateAsoBrief(server);
+
+// Register Phase 5: App Store Connect tools
+registerConnectSetup(server);
+registerConnectGetApp(server);
+registerConnectGetMetadata(server);
+registerConnectUpdateMetadata(server);
+registerConnectListLocalizations(server);
 
 // Register Utility tools
 registerClearCache(server);

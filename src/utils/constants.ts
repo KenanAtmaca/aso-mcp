@@ -3,6 +3,9 @@ export const CHAR_LIMITS = {
   TITLE: 30,
   SUBTITLE: 30,
   KEYWORD_FIELD: 100,
+  DESCRIPTION: 4000,
+  PROMOTIONAL_TEXT: 170,
+  WHATS_NEW: 4000,
 } as const;
 
 // Cache TTL values (seconds)
@@ -14,6 +17,9 @@ export const CACHE_TTL = {
   SIMILAR_APPS: 86400,        // 24 hours
   VERSION_HISTORY: 604800,    // 7 days
   SUGGESTIONS: 3600,          // 1 hour
+  CONNECT_APP: 1800,          // 30 minutes
+  CONNECT_METADATA: 300,      // 5 minutes
+  CONNECT_LOCALIZATIONS: 600, // 10 minutes
 } as const;
 
 // Rate limit settings
@@ -21,6 +27,7 @@ export const RATE_LIMITS = {
   "app-store-scraper": { maxRequests: 20, windowMs: 60_000 },
   "aso-scores": { maxRequests: 10, windowMs: 60_000 },
   "apple-search-ads": { maxRequests: 100, windowMs: 3_600_000 },
+  "app-store-connect": { maxRequests: 200, windowMs: 60_000 },
 } as const;
 
 // Supported countries (most used)
