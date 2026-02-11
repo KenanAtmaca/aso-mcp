@@ -9,18 +9,18 @@ import { extractTitleKeywords } from "../data-sources/custom-scoring.js";
 export function registerOptimizeMetadata(server: McpServer) {
   server.tool(
     "optimize_metadata",
-    "Bir uygulamanin title, subtitle ve keyword field icin optimizasyon onerisi sunar. Karakter limiti kontrolu dahil. Hedef keyword'lere gore metadata iyilestirmesi yapar.",
+    "Provides optimization suggestions for an app's title, subtitle, and keyword field. Includes character limit checks. Improves metadata based on target keywords.",
     {
       appId: z
         .string()
-        .describe("App Store app ID veya bundle ID"),
+        .describe("App Store app ID or bundle ID"),
       targetKeywords: z
         .array(z.string())
-        .describe("Hedeflenen keyword'ler listesi"),
+        .describe("List of target keywords"),
       country: z
         .string()
         .default("tr")
-        .describe("Ulke kodu (tr, us, de, gb, fr...)"),
+        .describe("Country code (tr, us, de, gb, fr...)"),
     },
     async ({ appId, targetKeywords, country }) => {
       const cacheKey = `metadata:${appId}:${targetKeywords.join(",")}:${country}`;
@@ -32,7 +32,7 @@ export function registerOptimizeMetadata(server: McpServer) {
       try {
         const app = await getAppDetails(appId, country);
 
-        // Keyword skorlarını al
+        // Get keyword scores
         const keywordScores: Record<
           string,
           { traffic: number; difficulty: number }
@@ -45,17 +45,17 @@ export function registerOptimizeMetadata(server: McpServer) {
           }
         }
 
-        // Keyword'leri traffic'e göre sırala
+        // Sort keywords by traffic
         const sortedKeywords = [...targetKeywords].sort((a, b) => {
           const aScore = keywordScores[a]?.traffic ?? 0;
           const bScore = keywordScores[b]?.traffic ?? 0;
           return bScore - aScore;
         });
 
-        // Mevcut title keyword'leri
+        // Current title keywords
         const currentTitleKeywords = extractTitleKeywords(app.title || "");
 
-        // Title önerisi: en yüksek traffic keyword'leri dahil et
+        // Title suggestion: include highest traffic keywords
         const titleKeywordsToInclude = sortedKeywords.slice(0, 3);
         const appName = (app.title || "").split(/[-:|]/)[0].trim();
         const suggestedTitleParts = [appName];
@@ -70,7 +70,7 @@ export function registerOptimizeMetadata(server: McpServer) {
         }
         const suggestedTitle = suggestedTitleParts.join(" - ").slice(0, CHAR_LIMITS.TITLE);
 
-        // Subtitle önerisi
+        // Subtitle suggestion
         const subtitleKeywords = sortedKeywords
           .filter(
             (kw) =>
@@ -81,7 +81,7 @@ export function registerOptimizeMetadata(server: McpServer) {
           .join(", ")
           .slice(0, CHAR_LIMITS.SUBTITLE);
 
-        // Keyword field önerisi (title ve subtitle'da olmayanlar)
+        // Keyword field suggestion (keywords not in title and subtitle)
         const usedKeywords = new Set(
           [
             ...extractTitleKeywords(suggestedTitle),
@@ -108,7 +108,7 @@ export function registerOptimizeMetadata(server: McpServer) {
           }
         }
 
-        // Rakip analizi: aynı keyword'de top app'ler ne kullanıyor
+        // Competitor analysis: what top apps use for the same keyword
         let competitorKeywords: string[] = [];
         try {
           const topApps = await searchApps(
@@ -122,29 +122,29 @@ export function registerOptimizeMetadata(server: McpServer) {
             ),
           ].filter((kw) => !usedKeywords.has(kw));
         } catch {
-          // devam
+          // continue
         }
 
-        // Uyarılar
+        // Warnings
         const warnings: string[] = [];
         if (suggestedTitle.length > CHAR_LIMITS.TITLE) {
           warnings.push(
-            `Title ${suggestedTitle.length} karakter — limit ${CHAR_LIMITS.TITLE}`
+            `Title is ${suggestedTitle.length} chars — limit is ${CHAR_LIMITS.TITLE}`
           );
         }
         if (suggestedSubtitle.length > CHAR_LIMITS.SUBTITLE) {
           warnings.push(
-            `Subtitle ${suggestedSubtitle.length} karakter — limit ${CHAR_LIMITS.SUBTITLE}`
+            `Subtitle is ${suggestedSubtitle.length} chars — limit is ${CHAR_LIMITS.SUBTITLE}`
           );
         }
         if (keywordField.length > CHAR_LIMITS.KEYWORD_FIELD) {
           warnings.push(
-            `Keyword field ${keywordField.length} karakter — limit ${CHAR_LIMITS.KEYWORD_FIELD}`
+            `Keyword field is ${keywordField.length} chars — limit is ${CHAR_LIMITS.KEYWORD_FIELD}`
           );
         }
         if (keywordField.includes(" ")) {
           warnings.push(
-            "Keyword field'da bosluk kullanma — virgul ile ayir"
+            "Do not use spaces in the keyword field — separate with commas"
           );
         }
 
@@ -192,7 +192,7 @@ export function registerOptimizeMetadata(server: McpServer) {
         return { content: [{ type: "text" as const, text: resultText }] };
       } catch (error: any) {
         return {
-          content: [{ type: "text" as const, text: `Hata: ${error.message}` }],
+          content: [{ type: "text" as const, text: `Error: ${error.message}` }],
           isError: true,
         };
       }

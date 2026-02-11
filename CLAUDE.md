@@ -44,7 +44,7 @@ export function registerToolName(server: McpServer) {
       setCache(cacheKey, resultText, CACHE_TTL.KEYWORD_SCORES);
       return { content: [{ type: "text" as const, text: resultText }] };
     } catch (error: any) {
-      return { content: [{ type: "text" as const, text: `Hata: ${error.message}` }], isError: true };
+      return { content: [{ type: "text" as const, text: `Error: ${error.message}` }], isError: true };
     }
   });
 }

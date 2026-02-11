@@ -12,18 +12,18 @@ import {
 export function registerKeywordGap(server: McpServer) {
   server.tool(
     "keyword_gap",
-    "Iki uygulama arasindaki keyword farkini analiz eder. Hangi keyword'ler sadece birinde var, hangileri ortaksa gosterir. Firsat keyword'lerini belirler.",
+    "Analyzes the keyword difference between two apps. Shows which keywords are unique to each app and which are shared. Identifies opportunity keywords.",
     {
       appId1: z
         .string()
-        .describe("Birinci app ID veya bundle ID"),
+        .describe("First app ID or bundle ID"),
       appId2: z
         .string()
-        .describe("Ikinci app ID veya bundle ID"),
+        .describe("Second app ID or bundle ID"),
       country: z
         .string()
         .default("tr")
-        .describe("Ulke kodu"),
+        .describe("Country code"),
     },
     async ({ appId1, appId2, country }) => {
       const cacheKey = `gap:${appId1}:${appId2}:${country}`;
@@ -33,13 +33,13 @@ export function registerKeywordGap(server: McpServer) {
       }
 
       try {
-        // Her iki app'in detaylarını al
+        // Get details for both apps
         const [app1, app2] = await Promise.all([
           getAppDetails(appId1, country),
           getAppDetails(appId2, country),
         ]);
 
-        // Keyword'leri çıkar: title + description
+        // Extract keywords: title + description
         const extractAllKeywords = (app: any): string[] => {
           const titleKws = extractTitleKeywords(app.title || "");
           const descKws = extractTitleKeywords(
@@ -58,7 +58,7 @@ export function registerKeywordGap(server: McpServer) {
         const onlyApp2 = keywords2.filter((kw) => !set1.has(kw));
         const shared = keywords1.filter((kw) => set2.has(kw));
 
-        // Fırsat keyword'leri: app2'de olup app1'de olmayan ve yüksek traffic'li
+        // Opportunity keywords: in app2 but not in app1, with high traffic
         const opportunities: {
           keyword: string;
           traffic: number;
@@ -67,7 +67,7 @@ export function registerKeywordGap(server: McpServer) {
           source: string;
         }[] = [];
 
-        // App1 için fırsatlar (app2'de olup app1'de olmayan)
+        // Opportunities for app1 (in app2 but not in app1)
         for (const kw of onlyApp2.slice(0, 15)) {
           try {
             const scores = await getScores(kw, country);
@@ -79,14 +79,14 @@ export function registerKeywordGap(server: McpServer) {
                 scores.traffic,
                 scores.difficulty
               ),
-              source: `${app2.title} icin benzersiz`,
+              source: `Unique to ${app2.title}`,
             });
           } catch {
-            // devam
+            // continue
           }
         }
 
-        // App2 için fırsatlar (app1'de olup app2'de olmayan)
+        // Opportunities for app2 (in app1 but not in app2)
         for (const kw of onlyApp1.slice(0, 15)) {
           try {
             const scores = await getScores(kw, country);
@@ -98,14 +98,14 @@ export function registerKeywordGap(server: McpServer) {
                 scores.traffic,
                 scores.difficulty
               ),
-              source: `${app1.title} icin benzersiz`,
+              source: `Unique to ${app1.title}`,
             });
           } catch {
-            // devam
+            // continue
           }
         }
 
-        // Fırsatları skora göre sırala
+        // Sort opportunities by score
         opportunities.sort((a, b) => b.opportunityScore - a.opportunityScore);
 
         const result = {
@@ -141,7 +141,7 @@ export function registerKeywordGap(server: McpServer) {
         return { content: [{ type: "text" as const, text: resultText }] };
       } catch (error: any) {
         return {
-          content: [{ type: "text" as const, text: `Hata: ${error.message}` }],
+          content: [{ type: "text" as const, text: `Error: ${error.message}` }],
           isError: true,
         };
       }

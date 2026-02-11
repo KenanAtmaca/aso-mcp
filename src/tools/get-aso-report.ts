@@ -20,19 +20,19 @@ import {
 export function registerGetAsoReport(server: McpServer) {
   server.tool(
     "get_aso_report",
-    "Bir uygulama icin kapsamli ASO raporu olusturur. App detaylari, keyword skorlari, rakip analizi, review ozeti ve metadata durumunu tek seferde toplar. AI'in derinlemesine ASO analizi yapabilmesi icin en ideal tool.",
+    "Generates a comprehensive ASO report for an app. Gathers app details, keyword scores, competitor analysis, review summary, and metadata status in one call. The ideal tool for AI to perform in-depth ASO analysis.",
     {
       appId: z
         .string()
-        .describe("App Store app ID veya bundle ID"),
+        .describe("App Store app ID or bundle ID"),
       country: z
         .string()
         .default("tr")
-        .describe("Ulke kodu"),
+        .describe("Country code"),
       competitors: z
         .number()
         .default(5)
-        .describe("Analiz edilecek rakip sayisi"),
+        .describe("Number of competitors to analyze"),
     },
     async ({ appId, country, competitors }) => {
       const cacheKey = `report:${appId}:${country}:${competitors}`;
@@ -42,11 +42,11 @@ export function registerGetAsoReport(server: McpServer) {
       }
 
       try {
-        // 1. App detaylari
+        // 1. App details
         const app = await getAppDetails(appId, country);
         const titleKeywords = extractTitleKeywords(app.title || "");
 
-        // 2. Title keyword skorlari
+        // 2. Title keyword scores
         const keywordScores: {
           keyword: string;
           traffic: number;
@@ -61,7 +61,7 @@ export function registerGetAsoReport(server: McpServer) {
           }
         }
 
-        // 3. App'in adıyla arama — rakipler
+        // 3. Search by app name — competitors
         let competitorApps: any[] = [];
         try {
           competitorApps = await searchApps(
@@ -69,23 +69,23 @@ export function registerGetAsoReport(server: McpServer) {
             country,
             competitors + 1
           );
-          // Kendisini çıkar
+          // Remove self
           competitorApps = competitorApps.filter(
             (a: any) => a.id !== app.id && a.appId !== app.appId
           ).slice(0, competitors);
         } catch {
-          // devam
+          // continue
         }
 
-        // 4. Benzer uygulamalar
+        // 4. Similar apps
         let similarApps: any[] = [];
         try {
           similarApps = (await getSimilarApps(app.id, country)).slice(0, 5);
         } catch {
-          // devam
+          // continue
         }
 
-        // 5. Review ozeti
+        // 5. Review summary
         let reviewSummary = {
           total: 0,
           positive: 0,
@@ -108,10 +108,10 @@ export function registerGetAsoReport(server: McpServer) {
             }
           }
         } catch {
-          // devam
+          // continue
         }
 
-        // 6. Skorlar
+        // 6. Scores
         const visibilityScore = calculateVisibilityScore({
           rating: app.score || 0,
           reviewCount: app.reviews || 0,
@@ -147,7 +147,7 @@ export function registerGetAsoReport(server: McpServer) {
           opportunityScore,
         });
 
-        // 7. Metadata analizi
+        // 7. Metadata analysis
         const titleLength = (app.title || "").length;
         const competitorKeywords = [
           ...new Set(
@@ -214,7 +214,7 @@ export function registerGetAsoReport(server: McpServer) {
         return { content: [{ type: "text" as const, text: resultText }] };
       } catch (error: any) {
         return {
-          content: [{ type: "text" as const, text: `Hata: ${error.message}` }],
+          content: [{ type: "text" as const, text: `Error: ${error.message}` }],
           isError: true,
         };
       }

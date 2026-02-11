@@ -8,23 +8,23 @@ import { CACHE_TTL } from "../utils/constants.js";
 export function registerSuggestKeywords(server: McpServer) {
   server.tool(
     "suggest_keywords",
-    "Bir app ID verildiginde farkli stratejilerle keyword onerisi uretir. Kategori, benzer uygulamalar veya rekabet bazli keyword onerileri sunar.",
+    "Generates keyword suggestions using different strategies for a given app ID. Provides category-based, similar apps-based, or competition-based keyword recommendations.",
     {
       appId: z
         .string()
-        .describe("App Store app ID (or: 'com.spotify.client' veya '324684580')"),
+        .describe("App Store app ID (e.g. 'com.spotify.client' or '324684580')"),
       strategy: z
         .enum(["category", "similar", "competition", "all"])
         .default("all")
-        .describe("Keyword onerisi stratejisi"),
+        .describe("Keyword suggestion strategy"),
       country: z
         .string()
         .default("tr")
-        .describe("Ulke kodu (tr, us, de, gb, fr...)"),
+        .describe("Country code (tr, us, de, gb, fr...)"),
       num: z
         .number()
         .default(20)
-        .describe("Her strateji icin onerilecek keyword sayisi"),
+        .describe("Number of keywords to suggest per strategy"),
     },
     async ({ appId, strategy, country, num }) => {
       const cacheKey = `suggest:${appId}:${strategy}:${country}:${num}`;
@@ -50,7 +50,7 @@ export function registerSuggestKeywords(server: McpServer) {
           }
         }
 
-        // Benzersiz keyword'lerin skorlarini al
+        // Get scores for unique keywords
         const uniqueKeywords = [
           ...new Set(Object.values(allKeywords).flat()),
         ];
@@ -73,7 +73,7 @@ export function registerSuggestKeywords(server: McpServer) {
           }
         }
 
-        // Traffic'e gore sirala
+        // Sort by traffic
         scoredKeywords.sort((a, b) => b.traffic - a.traffic);
 
         const result = {
@@ -93,7 +93,7 @@ export function registerSuggestKeywords(server: McpServer) {
         return { content: [{ type: "text" as const, text: resultText }] };
       } catch (error: any) {
         return {
-          content: [{ type: "text" as const, text: `Hata: ${error.message}` }],
+          content: [{ type: "text" as const, text: `Error: ${error.message}` }],
           isError: true,
         };
       }

@@ -1,38 +1,47 @@
 # ASO MCP Server
 
-App Store Optimization MCP Server for AI Assistants. Claude, ChatGPT, Cursor gibi AI araclariyla App Store keyword arastirmasi, rakip analizi ve metadata optimizasyonu yapin.
+[![npm version](https://img.shields.io/npm/v/aso-mcp.svg)](https://www.npmjs.com/package/aso-mcp)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+[![Node.js](https://img.shields.io/badge/Node.js-22%2B-green.svg)](https://nodejs.org)
+[![MCP](https://img.shields.io/badge/MCP-Compatible-purple.svg)](https://modelcontextprotocol.io)
 
-## Ozellikler
+**App Store Optimization toolkit for AI assistants.** Keyword research, competitor analysis, review sentiment, metadata optimization — all through the Model Context Protocol.
 
-- **10 ASO tool'u** — keyword arastirma, skorlama, rakip analizi, review analizi, metadata optimizasyonu
-- **Gercek App Store verisi** — app-store-scraper ile canli veri
-- **Custom scoring** — Apple Search Ads sorununa bagimli olmayan kendi algoritma
-- **SQLite cache** — Tekrar eden isteklerde hizli yanit
-- **Rate limiting** — Apple'dan ban yememek icin akilli istek yonetimi
-- **Coklu ulke destegi** — 155+ ulke, Turkce ASO'ya ozel destek
+> **No API key required.** Works out of the box with real App Store data. Supports 155+ countries.
 
-## Kurulum
+## Quick Start
 
-### npm ile (Global)
+```bash
+npx aso-mcp
+```
+
+Or install globally:
 
 ```bash
 npm install -g aso-mcp
 ```
 
-### Kaynaktan
+## Why aso-mcp?
 
-```bash
-git clone https://github.com/kenanatmaca/aso-mcp.git
-cd aso-mcp
-npm install
-npm run build
-```
+- **12 specialized ASO tools** — from keyword discovery to complete ASO briefs
+- **Real App Store data** — live search results, ratings, reviews, and suggestions
+- **Custom scoring engine** — proprietary algorithm independent of Apple Search Ads API issues
+- **No API key needed** — zero configuration, install and go
+- **Smart caching** — SQLite-backed cache for fast repeated queries
+- **Rate limiting** — built-in request management to avoid Apple throttling
+- **Multi-country** — analyze keywords across 155+ App Store markets
 
-## Claude Desktop Entegrasyonu
+## Integration
 
-`~/Library/Application Support/Claude/claude_desktop_config.json` dosyasina ekle:
+### Claude Desktop
 
-### npm ile kurduysan:
+Add to your config file:
+
+| OS | Path |
+|----|------|
+| macOS | `~/Library/Application Support/Claude/claude_desktop_config.json` |
+| Windows | `%APPDATA%\Claude\claude_desktop_config.json` |
+| Linux | `~/.config/Claude/claude_desktop_config.json` |
 
 ```json
 {
@@ -44,7 +53,8 @@ npm run build
 }
 ```
 
-### Kaynaktan calistiriyorsan:
+<details>
+<summary>Running from source instead?</summary>
 
 ```json
 {
@@ -58,101 +68,117 @@ npm run build
 }
 ```
 
-## Claude Code Entegrasyonu
+</details>
+
+### Claude Code
 
 ```bash
-claude mcp add aso-mcp npx tsx /ABSOLUTE/PATH/TO/aso-mcp/src/server.ts
+claude mcp add -s user aso-mcp -- npx aso-mcp
 ```
 
-## Tool'lar
+### Other MCP Clients
 
-### Faz 1 — Keyword Arastirma
+Any MCP-compatible client (ChatGPT, Cursor, Windsurf, etc.) can connect via stdio transport. Point it to the `aso-mcp` command.
 
-| Tool | Aciklama |
-|------|----------|
-| `search_keywords` | Keyword traffic/difficulty skorlari + ust siradaki uygulamalar |
-| `suggest_keywords` | App ID'ye gore keyword onerileri (kategori, benzer, rekabet stratejileri) |
-| `get_app_details` | Uygulamanin tum ASO bilgileri + metadata analizi |
+## Tools
 
-### Faz 2 — Rakip Analizi & Optimizasyon
+### Phase 1 — Keyword Research
 
-| Tool | Aciklama |
-|------|----------|
-| `analyze_competitors` | Keyword'deki rakiplerin metadata karsilastirmasi + keyword gap |
-| `optimize_metadata` | Title/subtitle/keyword field optimizasyon onerisi (karakter limiti dahil) |
-| `analyze_reviews` | Sentiment analizi, sikayet ve feature request cikarma |
-| `track_ranking` | Birden fazla keyword'de uygulamanin siralama pozisyonu |
-| `keyword_gap` | Iki uygulama arasindaki keyword farki + firsat analizi |
+| Tool | Description |
+|------|-------------|
+| `search_keywords` | Traffic/difficulty scores + top-ranking apps for a keyword |
+| `suggest_keywords` | Keyword suggestions by app ID (category, similar, competition strategies) |
+| `get_app_details` | Full ASO info for an app + metadata analysis |
 
-### Faz 3 — Lokalizasyon & Raporlama
+### Phase 2 — Competitor Analysis & Optimization
 
-| Tool | Aciklama |
-|------|----------|
-| `localized_keywords` | Keyword'lerin farkli ulkelerdeki performans karsilastirmasi |
-| `get_aso_report` | Kapsamli ASO raporu: detay + skorlar + rakipler + review ozeti |
+| Tool | Description |
+|------|-------------|
+| `analyze_competitors` | Metadata comparison of top apps for a keyword + keyword gap |
+| `optimize_metadata` | Title/subtitle/keyword field suggestions with character limit checks |
+| `analyze_reviews` | Sentiment analysis, complaint and feature request extraction |
+| `track_ranking` | App's ranking position across multiple keywords |
+| `keyword_gap` | Keyword difference between two apps + opportunity analysis |
 
-## Kullanim Ornekleri
+### Phase 3 — Localization & Reporting
 
-Claude Desktop veya Claude Code'da su sorulari sorabilirsin:
+| Tool | Description |
+|------|-------------|
+| `localized_keywords` | Keyword performance comparison across different countries |
+| `get_aso_report` | Comprehensive ASO report: scores + competitors + reviews in one call |
+
+### Phase 4 — ASO Generation
+
+| Tool | Description |
+|------|-------------|
+| `discover_keywords` | Keyword discovery from scratch for a new app |
+| `generate_aso_brief` | Complete ASO brief with keyword pool, competitor patterns, and metadata suggestions |
+
+## Usage Examples
+
+Just ask your AI assistant naturally:
 
 ```
-"fitness keyword'u Turkiye'de ne kadar rekabetci?"
+"How competitive is the 'fitness' keyword in the US?"
 
-"Spotify'in rakiplerini analiz et ve keyword firsatlarini bul"
+"Analyze Spotify's competitors and find keyword opportunities"
 
-"com.spotify.client uygulamasi icin ASO raporu cikar"
+"Generate an ASO report for com.spotify.client"
 
-"muzik ve podcast keyword'lerini TR, US, DE pazarlarinda karsilastir"
+"Compare 'music' and 'podcast' keywords across US, UK, and DE markets"
 
-"Spotify vs Apple Music keyword gap analizi yap"
+"Do a keyword gap analysis: Spotify vs Apple Music"
 
-"Shazam'in kullanici yorumlarini analiz et"
+"Analyze Shazam's user reviews"
 
-"com.myapp icin title ve subtitle onerisi ver, hedef: fitness, egzersiz, antrenman"
+"Suggest title and subtitle for my fitness app targeting: workout, training, exercise"
 
-"meditation keyword'unde ilk 10'daki uygulamalari karsilastir"
+"Discover keywords for a new calorie tracking app"
 ```
 
-## Gelistirme
+## Scoring Algorithm
+
+The server calculates its own scores, independent of Apple Search Ads API:
+
+| Score | Description |
+|-------|-------------|
+| **Visibility** | Based on rating, review count, and ranking position |
+| **Competitive** | Difficulty derived from the strength of top-ranking apps |
+| **Opportunity** | High traffic + low difficulty = high opportunity |
+| **Overall** | Weighted combination of all scores (0-10) |
+
+When the `aso` npm package fails to reach Apple (503 errors), the server automatically falls back to custom scoring using search result analysis — so scores are always available.
+
+## Development
 
 ```bash
-# Dev mode
-npm run dev
+git clone https://github.com/kenanatmaca/aso-mcp.git
+cd aso-mcp
+npm install
 
-# Build
-npm run build
+npm run dev          # Run with tsx (development)
+npm run build        # Compile TypeScript
+npm run inspect      # MCP Inspector UI
 
-# MCP Inspector ile test
-npm run inspect
-
-# Test suite
-npx tsx test.ts
+# Tests
+npx tsx test.ts              # Core tests (17)
+npx tsx test-phase3.ts       # Localization & report tests (4)
+npx tsx test-generation.ts   # ASO generation tests (8)
 ```
 
-## Teknoloji Stack
+## Tech Stack
 
 - **TypeScript** + **Node.js 22+**
-- **MCP SDK** — Model Context Protocol
-- **app-store-scraper** — App Store veri cekme
-- **aso** — ASO skorlama (fallback ile)
-- **better-sqlite3** — Cache
-- **Zod** — Schema validation
+- **[MCP SDK](https://modelcontextprotocol.io)** — Model Context Protocol
+- **[app-store-scraper](https://www.npmjs.com/package/app-store-scraper)** — App Store data
+- **[aso](https://www.npmjs.com/package/aso)** — ASO scoring with automatic fallback
+- **[better-sqlite3](https://www.npmjs.com/package/better-sqlite3)** — Cache layer
+- **[Zod](https://www.npmjs.com/package/zod)** — Schema validation
 
-## Skorlama Algoritmasi
-
-Apple Search Ads API'nin popularity sorununa bagimli olmadan kendi skorlarini hesaplar:
-
-| Skor | Aciklama |
-|------|----------|
-| **Visibility** | Rating, review sayisi ve siralama bazli gorunurluk |
-| **Competitive** | Ust siradaki uygulamalarin gucune gore zorluk |
-| **Opportunity** | Yuksek traffic + dusuk difficulty = yuksek firsat |
-| **Overall** | Tumunu birlestiren genel ASO skoru |
-
-## Lisans
+## License
 
 MIT
 
-## Yazar
+## Author
 
-Kenan Atmaca
+[Kenan Atmaca](https://github.com/kenanatmaca)

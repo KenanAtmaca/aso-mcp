@@ -12,17 +12,17 @@ import {
 export function registerAnalyzeCompetitors(server: McpServer) {
   server.tool(
     "analyze_competitors",
-    "Bir keyword'de ust siradaki uygulamalarin metadata'sini ceker, karsilastirir ve keyword gap analizi yapar. Rekabet ortamini anlamak icin kullanilir.",
+    "Fetches and compares metadata of top-ranking apps for a keyword, and performs keyword gap analysis. Used to understand the competitive landscape.",
     {
-      keyword: z.string().describe("Analiz edilecek keyword"),
+      keyword: z.string().describe("Keyword to analyze"),
       country: z
         .string()
         .default("tr")
-        .describe("Ulke kodu (tr, us, de, gb, fr...)"),
+        .describe("Country code (tr, us, de, gb, fr...)"),
       num: z
         .number()
         .default(10)
-        .describe("Analiz edilecek rakip app sayisi"),
+        .describe("Number of competitor apps to analyze"),
     },
     async ({ keyword, country, num }) => {
       const cacheKey = `competitors:${keyword}:${country}:${num}`;
@@ -34,7 +34,7 @@ export function registerAnalyzeCompetitors(server: McpServer) {
       try {
         const topApps = await searchApps(keyword, country, num);
 
-        // Her app'in title keyword'lerini çıkar
+        // Extract title keywords for each app
         const appsWithKeywords = topApps.map((app: any) => {
           const titleKeywords = extractTitleKeywords(app.title || "");
           return {
@@ -49,7 +49,7 @@ export function registerAnalyzeCompetitors(server: McpServer) {
           };
         });
 
-        // Keyword frequency analizi
+        // Keyword frequency analysis
         const keywordFrequency: Record<string, number> = {};
         for (const app of appsWithKeywords) {
           for (const kw of app.titleKeywords) {
@@ -57,22 +57,22 @@ export function registerAnalyzeCompetitors(server: McpServer) {
           }
         }
 
-        // Common keywords (2+ app'te geçen)
+        // Common keywords (appearing in 2+ apps)
         const commonKeywords = Object.entries(keywordFrequency)
           .filter(([, count]) => count >= 2)
           .sort((a, b) => b[1] - a[1])
           .map(([kw]) => kw);
 
-        // Tüm benzersiz keyword'ler
+        // All unique keywords
         const allKeywords = [...new Set(
           appsWithKeywords.flatMap((a) => a.titleKeywords)
         )];
 
-        // Keyword gap: commonKeywords'de olmayan keyword'ler (fırsat)
+        // Keyword gap: keywords not in commonKeywords (opportunity)
         const commonSet = new Set(commonKeywords);
         const keywordGap = allKeywords.filter((kw) => !commonSet.has(kw));
 
-        // Metrikler
+        // Metrics
         const avgRating =
           appsWithKeywords.reduce((s, a) => s + a.rating, 0) /
           appsWithKeywords.length;
@@ -84,7 +84,7 @@ export function registerAnalyzeCompetitors(server: McpServer) {
             appsWithKeywords.length) *
           100;
 
-        // Top developer'lar
+        // Top developers
         const devFrequency: Record<string, number> = {};
         for (const app of appsWithKeywords) {
           devFrequency[app.developer] = (devFrequency[app.developer] || 0) + 1;
@@ -97,12 +97,12 @@ export function registerAnalyzeCompetitors(server: McpServer) {
         // Competitive score
         const competitiveScore = calculateCompetitiveScore(appsWithKeywords);
 
-        // Ana keyword skoru
+        // Main keyword score
         let keywordScores = { traffic: 0, difficulty: 0 };
         try {
           keywordScores = await getScores(keyword, country);
         } catch {
-          // scoring alınamazsa devam
+          // Continue if scoring fails
         }
 
         const result = {
@@ -128,7 +128,7 @@ export function registerAnalyzeCompetitors(server: McpServer) {
         return { content: [{ type: "text" as const, text: resultText }] };
       } catch (error: any) {
         return {
-          content: [{ type: "text" as const, text: `Hata: ${error.message}` }],
+          content: [{ type: "text" as const, text: `Error: ${error.message}` }],
           isError: true,
         };
       }

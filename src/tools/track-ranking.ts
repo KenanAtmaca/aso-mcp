@@ -7,18 +7,18 @@ import { CACHE_TTL } from "../utils/constants.js";
 export function registerTrackRanking(server: McpServer) {
   server.tool(
     "track_ranking",
-    "Belirli keyword'lerde bir uygulamanin siralama pozisyonunu bulur. Her keyword icin ilk 100 sonuc icinde app'in kacinci sirada oldugunu gosterir.",
+    "Finds an app's ranking position for specific keywords. Shows the app's position within the top 100 results for each keyword.",
     {
       appId: z
         .string()
-        .describe("App Store app ID veya bundle ID (or: 'com.spotify.client')"),
+        .describe("App Store app ID or bundle ID (e.g. 'com.spotify.client')"),
       keywords: z
         .array(z.string())
-        .describe("Takip edilecek keyword listesi"),
+        .describe("List of keywords to track"),
       country: z
         .string()
         .default("tr")
-        .describe("Ulke kodu"),
+        .describe("Country code"),
     },
     async ({ appId, keywords, country }) => {
       const cacheKey = `ranking:${appId}:${keywords.join(",")}:${country}`;
@@ -41,7 +41,7 @@ export function registerTrackRanking(server: McpServer) {
           try {
             const results = await searchApps(keyword, country, 100);
 
-            // App'in pozisyonunu bul
+            // Find the app's position
             let position: number | null = null;
             for (let i = 0; i < results.length; i++) {
               const result = results[i] as any;
@@ -62,20 +62,20 @@ export function registerTrackRanking(server: McpServer) {
             rankings.push({
               keyword,
               position,
-              topApp: topResult?.title || "Bilinmiyor",
+              topApp: topResult?.title || "Unknown",
               totalResults: results.length,
             });
           } catch {
             rankings.push({
               keyword,
               position: null,
-              topApp: "Hata",
+              topApp: "Error",
               totalResults: 0,
             });
           }
         }
 
-        // Özet
+        // Summary
         const found = rankings.filter((r) => r.position !== null);
         const top10 = found.filter((r) => r.position! <= 10);
         const top50 = found.filter((r) => r.position! <= 50);
@@ -105,7 +105,7 @@ export function registerTrackRanking(server: McpServer) {
         return { content: [{ type: "text" as const, text: resultText }] };
       } catch (error: any) {
         return {
-          content: [{ type: "text" as const, text: `Hata: ${error.message}` }],
+          content: [{ type: "text" as const, text: `Error: ${error.message}` }],
           isError: true,
         };
       }

@@ -7,21 +7,21 @@ import { CACHE_TTL, CHAR_LIMITS } from "../utils/constants.js";
 export function registerGetAppDetails(server: McpServer) {
   server.tool(
     "get_app_details",
-    "Tek bir uygulamanin tum ASO-relevant bilgilerini getirir: baslik, aciklama, rating, yorumlar, benzer uygulamalar ve metadata analizi.",
+    "Retrieves all ASO-relevant information for a single app: title, description, rating, reviews, similar apps, and metadata analysis.",
     {
       appId: z
         .string()
         .describe(
-          "App Store app ID veya bundle ID (or: '324684580' veya 'com.spotify.client')"
+          "App Store app ID or bundle ID (e.g. '324684580' or 'com.spotify.client')"
         ),
       country: z
         .string()
         .default("tr")
-        .describe("Ulke kodu (tr, us, de, gb, fr...)"),
+        .describe("Country code (tr, us, de, gb, fr...)"),
       includeSimilar: z
         .boolean()
         .default(true)
-        .describe("Benzer uygulamalari da getir"),
+        .describe("Also fetch similar apps"),
     },
     async ({ appId, country, includeSimilar }) => {
       const cacheKey = `app:${appId}:${country}:${includeSimilar}`;
@@ -38,7 +38,7 @@ export function registerGetAppDetails(server: McpServer) {
           try {
             similarApps = await getSimilarApps(app.id, country);
           } catch {
-            // Benzer app'ler alinamazsa devam et
+            // Continue if similar apps cannot be fetched
           }
         }
 
@@ -92,7 +92,7 @@ export function registerGetAppDetails(server: McpServer) {
         return { content: [{ type: "text" as const, text: resultText }] };
       } catch (error: any) {
         return {
-          content: [{ type: "text" as const, text: `Hata: ${error.message}` }],
+          content: [{ type: "text" as const, text: `Error: ${error.message}` }],
           isError: true,
         };
       }

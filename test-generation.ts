@@ -1,8 +1,8 @@
 /**
- * ASO Generation Tools — Gercek Senaryo Testi
- * Yeni bir fitness uygulamasi icin sifirdan ASO sureci
+ * ASO Generation Tools — Real Scenario Test
+ * Scenario: ASO process from scratch for a new fitness app
  *
- * Calistir: npx tsx test-generation.ts
+ * Run: npx tsx test-generation.ts
  */
 
 import { searchApps, getAppDetails, getSuggestions } from "./src/data-sources/app-store.js";
@@ -37,30 +37,30 @@ function assert(condition: boolean, msg: string) {
 }
 
 async function main() {
-  console.log(`\n${BOLD}🚀 ASO Generation — Gercek Senaryo Testi${RESET}`);
-  console.log(`   Senaryo: "FitTrack" kalori takip uygulamasi\n`);
+  console.log(`\n${BOLD}🚀 ASO Generation — Real Scenario Test${RESET}`);
+  console.log(`   Scenario: "FitTrack" calorie tracking app\n`);
   initCache();
 
-  // ─── SENARYO: Yeni fitness uygulamasi ───
+  // ─── SCENARIO: New fitness app ───
   const APP = {
     name: "FitTrack",
     category: "Health & Fitness",
-    niche: "kalori takibi ve diyet planlama",
-    features: ["kalori sayaci", "barkod okuyucu", "su takibi", "diyet plani", "kilo takibi"],
-    targetAudience: "diyet yapan kadinlar 25-40 yas",
+    niche: "calorie tracking and diet planning",
+    features: ["calorie counter", "barcode scanner", "water tracking", "diet plan", "weight tracking"],
+    targetAudience: "women on a diet aged 25-40",
     countries: ["tr", "us"],
   };
 
-  // ─── 1. discover_keywords senaryosu ───
-  console.log(`${BOLD}📍 Adim 1: Keyword Kesfi${RESET}`);
+  // ─── 1. discover_keywords scenario ───
+  console.log(`${BOLD}📍 Step 1: Keyword Discovery${RESET}`);
 
-  await test("Ozelliklerden arama terimleri olustur", async () => {
+  await test("Build search terms from features", async () => {
     const terms = [...APP.features.slice(0, 6), APP.category];
-    assert(terms.length >= 5, "En az 5 terim olmali");
-    console.log(`    ${INFO} Arama terimleri: ${terms.join(", ")}`);
+    assert(terms.length >= 5, "Should have at least 5 terms");
+    console.log(`    ${INFO} Search terms: ${terms.join(", ")}`);
   });
 
-  await test("Her terimle top app'leri tara", async () => {
+  await test("Scan top apps for each term", async () => {
     const allApps = new Map<string, any>();
     for (const term of APP.features.slice(0, 3)) {
       const apps = await searchApps(term, "tr", 5);
@@ -68,35 +68,35 @@ async function main() {
         allApps.set((a as any).appId || String((a as any).id), a);
       }
     }
-    assert(allApps.size > 0, "App bulunmali");
-    console.log(`    ${INFO} ${allApps.size} benzersiz app taralanidi`);
+    assert(allApps.size > 0, "Should find apps");
+    console.log(`    ${INFO} ${allApps.size} unique apps scanned`);
 
     const topApps = [...allApps.values()]
       .sort((a, b) => (b.reviews || 0) - (a.reviews || 0))
       .slice(0, 3);
     for (const a of topApps) {
-      console.log(`    ${INFO} ${a.title} — ${a.reviews} yorum`);
+      console.log(`    ${INFO} ${a.title} — ${a.reviews} reviews`);
     }
   });
 
-  await test("Title'lardan keyword havuzu cikar", async () => {
+  await test("Extract keyword pool from titles", async () => {
     const apps = await searchApps("kalori", "tr", 10);
     const allKeywords = new Set<string>();
     for (const app of apps) {
       const kws = extractTitleKeywords((app as any).title || "");
       kws.forEach((k: string) => allKeywords.add(k));
     }
-    assert(allKeywords.size > 0, "Keyword cikarilmali");
-    console.log(`    ${INFO} ${allKeywords.size} benzersiz keyword: ${[...allKeywords].slice(0, 10).join(", ")}`);
+    assert(allKeywords.size > 0, "Keywords should be extracted");
+    console.log(`    ${INFO} ${allKeywords.size} unique keywords: ${[...allKeywords].slice(0, 10).join(", ")}`);
   });
 
-  await test("Autocomplete onerileri al", async () => {
+  await test("Get autocomplete suggestions", async () => {
     const suggestions = await getSuggestions("kalori");
-    assert(Array.isArray(suggestions), "Oneriler array olmali");
-    console.log(`    ${INFO} ${suggestions.length} autocomplete onerisi`);
+    assert(Array.isArray(suggestions), "Suggestions should be an array");
+    console.log(`    ${INFO} ${suggestions.length} autocomplete suggestions`);
   });
 
-  await test("Keyword'leri skorla ve firsatlari sirala", async () => {
+  await test("Score keywords and rank opportunities", async () => {
     const testKeywords = ["kalori", "diyet", "kilo", "fitness", "saglik"];
     const scored: { kw: string; traffic: number; difficulty: number; opp: number }[] = [];
 
@@ -113,10 +113,10 @@ async function main() {
     }
   });
 
-  // ─── 2. generate_aso_brief senaryosu ───
-  console.log(`\n${BOLD}📍 Adim 2: ASO Brief Olusturma${RESET}`);
+  // ─── 2. generate_aso_brief scenario ───
+  console.log(`\n${BOLD}📍 Step 2: ASO Brief Generation${RESET}`);
 
-  await test("Rakip analizi", async () => {
+  await test("Competitor analysis", async () => {
     const apps = await searchApps("kalori sayaci", "tr", 5);
     const competitors = apps.map((a: any) => ({
       title: a.title,
@@ -130,12 +130,12 @@ async function main() {
       competitors.map((c) => ({ rating: c.rating, reviews: c.reviews, free: true }))
     );
 
-    console.log(`    ${INFO} Rekabet skoru: ${compScore.toFixed(1)} (${compScore > 7 ? "Yuksek" : compScore > 4 ? "Orta" : "Dusuk"})`);
+    console.log(`    ${INFO} Competition score: ${compScore.toFixed(1)} (${compScore > 7 ? "High" : compScore > 4 ? "Medium" : "Low"})`);
     for (const c of competitors.slice(0, 3)) {
-      console.log(`    ${INFO} "${c.title}" (${c.titleLength} kar) — Keywords: [${c.titleKeywords.join(", ")}]`);
+      console.log(`    ${INFO} "${c.title}" (${c.titleLength} chars) — Keywords: [${c.titleKeywords.join(", ")}]`);
     }
 
-    // Ortak keyword'ler
+    // Common keywords
     const kwFreq: Record<string, number> = {};
     for (const c of competitors) {
       for (const kw of c.titleKeywords) {
@@ -145,10 +145,10 @@ async function main() {
     const common = Object.entries(kwFreq)
       .filter(([, n]) => n >= 2)
       .map(([kw]) => kw);
-    console.log(`    ${INFO} Rakiplerde ortak: [${common.join(", ")}]`);
+    console.log(`    ${INFO} Common among competitors: [${common.join(", ")}]`);
   });
 
-  await test("Title/Subtitle/Keyword field onerileri", async () => {
+  await test("Title/Subtitle/Keyword field suggestions", async () => {
     const topKws = ["kalori", "diyet", "kilo", "fitness", "saglik", "beslenme", "egzersiz"];
     const scored = [];
     for (const kw of topKws) {
@@ -157,15 +157,15 @@ async function main() {
     }
     scored.sort((a, b) => b.traffic - a.traffic);
 
-    // Title onerisi
+    // Title suggestion
     const titleKws = scored.slice(0, 2).map((k) => k.keyword);
     const title = `${APP.name} - ${titleKws.join(" ")}`.slice(0, CHAR_LIMITS.TITLE);
-    console.log(`    ${INFO} Title onerisi: "${title}" (${title.length}/${CHAR_LIMITS.TITLE})`);
+    console.log(`    ${INFO} Title suggestion: "${title}" (${title.length}/${CHAR_LIMITS.TITLE})`);
 
-    // Subtitle onerisi
+    // Subtitle suggestion
     const subtitleKws = scored.slice(2, 5).map((k) => k.keyword);
     const subtitle = subtitleKws.join(", ").slice(0, CHAR_LIMITS.SUBTITLE);
-    console.log(`    ${INFO} Subtitle onerisi: "${subtitle}" (${subtitle.length}/${CHAR_LIMITS.SUBTITLE})`);
+    console.log(`    ${INFO} Subtitle suggestion: "${subtitle}" (${subtitle.length}/${CHAR_LIMITS.SUBTITLE})`);
 
     // Keyword field
     const usedKws = new Set([...titleKws, ...subtitleKws]);
@@ -173,12 +173,12 @@ async function main() {
     const field = [...fieldKws, ...APP.features.map((f) => f.replace(/\s+/g, ""))].join(",").slice(0, CHAR_LIMITS.KEYWORD_FIELD);
     console.log(`    ${INFO} Keyword field: "${field}" (${field.length}/${CHAR_LIMITS.KEYWORD_FIELD})`);
 
-    assert(title.length <= CHAR_LIMITS.TITLE, "Title limit asilmamali");
-    assert(subtitle.length <= CHAR_LIMITS.SUBTITLE, "Subtitle limit asilmamali");
-    assert(field.length <= CHAR_LIMITS.KEYWORD_FIELD, "Keyword field limit asilmamali");
+    assert(title.length <= CHAR_LIMITS.TITLE, "Title should not exceed limit");
+    assert(subtitle.length <= CHAR_LIMITS.SUBTITLE, "Subtitle should not exceed limit");
+    assert(field.length <= CHAR_LIMITS.KEYWORD_FIELD, "Keyword field should not exceed limit");
   });
 
-  await test("Coklu pazar karsilastirmasi", async () => {
+  await test("Multi-market comparison", async () => {
     const keyword = "calorie counter";
     for (const c of APP.countries) {
       const scores = await getScores(keyword, c);
@@ -188,11 +188,11 @@ async function main() {
     }
   });
 
-  // ─── Sonuc ───
+  // ─── Result ───
   console.log(`\n${"─".repeat(55)}`);
-  console.log(`  ${PASS} ${passed} test basarili`);
-  if (failed > 0) console.log(`  ${FAIL} ${failed} test basarisiz`);
-  else console.log(`  🎉 ASO Generation testleri gecti!`);
+  console.log(`  ${PASS} ${passed} tests passed`);
+  if (failed > 0) console.log(`  ${FAIL} ${failed} tests failed`);
+  else console.log(`  🎉 ASO Generation tests passed!`);
   console.log(`${"─".repeat(55)}\n`);
 
   process.exit(failed > 0 ? 1 : 0);

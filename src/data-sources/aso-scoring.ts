@@ -22,9 +22,9 @@ async function getClient(country: string = "tr"): Promise<any> {
 }
 
 /**
- * aso paketi 503 veriyorsa, search sonuçlarından kendi skorumuzu hesapla.
- * Traffic: arama sonucu sayısı + ortalama review sayısından tahmin
- * Difficulty: üst sıradaki app'lerin rating/review gücünden hesapla
+ * If the aso package returns 503, calculate our own scores from search results.
+ * Traffic: estimated from search result count + average review count
+ * Difficulty: calculated from rating/review strength of top-ranking apps
  */
 async function fallbackScores(
   keyword: string,
@@ -36,7 +36,7 @@ async function fallbackScores(
     return { traffic: 1, difficulty: 1 };
   }
 
-  // Traffic tahmini: sonuç kalitesine göre
+  // Traffic estimate: based on result quality
   const avgReviews =
     results.reduce((s: number, a: any) => s + (a.reviews || 0), 0) /
     results.length;
@@ -64,7 +64,7 @@ export async function getScores(
   keyword: string,
   country: string = "tr"
 ): Promise<{ traffic: number; difficulty: number }> {
-  // aso paketi daha önce başarısız olduysa direkt fallback
+  // If the aso package has previously failed, use fallback directly
   if (!asoAvailable) {
     return fallbackScores(keyword, country);
   }
@@ -78,7 +78,7 @@ export async function getScores(
         difficulty: result.difficulty ?? 0,
       };
     } catch {
-      // aso paketi çalışmıyor, fallback'e geç
+      // aso package not working, switch to fallback
       asoAvailable = false;
       return fallbackScores(keyword, country);
     }
@@ -91,7 +91,7 @@ export async function suggestKeywords(
   country: string = "tr",
   num: number = 20
 ): Promise<string[]> {
-  // aso paketi yoksa App Store suggest + search bazlı fallback
+  // If aso package unavailable, use App Store suggest + search based fallback
   if (!asoAvailable) {
     return fallbackSuggest(appId, strategy, country, num);
   }
@@ -119,8 +119,8 @@ export async function suggestKeywords(
 }
 
 /**
- * aso paketi çalışmadığında, app-store-scraper ile keyword önerisi üret.
- * App'in title + description'ındaki keyword'leri App Store suggest'e gönderir.
+ * When the aso package is unavailable, generate keyword suggestions via app-store-scraper.
+ * Sends keywords from the app's title + description to App Store suggest.
  */
 async function fallbackSuggest(
   appId: string,
@@ -129,13 +129,13 @@ async function fallbackSuggest(
   num: number
 ): Promise<string[]> {
   try {
-    // App Store autocomplete önerileri
+    // App Store autocomplete suggestions
     const suggestions = await getSuggestions(appId);
     if (suggestions.length >= num) {
       return suggestions.slice(0, num);
     }
 
-    // Ek olarak basit keyword'lerden suggest çek
+    // Additionally pull suggestions from simple keywords
     const extraTerms = appId.split(/[.\-_]/).filter((t) => t.length > 2);
     const allSuggestions = new Set(suggestions);
 
@@ -144,7 +144,7 @@ async function fallbackSuggest(
         const more = await getSuggestions(term);
         more.forEach((s: string) => allSuggestions.add(s));
       } catch {
-        // devam
+        // continue
       }
     }
 

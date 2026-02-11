@@ -12,25 +12,25 @@ import {
 export function registerDiscoverKeywords(server: McpServer) {
   server.tool(
     "discover_keywords",
-    "Yeni bir uygulama icin sifirdan keyword kesfi yapar. Kategori, nis tanimi ve ozellik listesinden yola cikarak top uygulamalari tarar, keyword havuzu olusturur ve her keyword'u skorlar. ASO surecinin ilk adimi.",
+    "Performs keyword discovery from scratch for a new app. Scans top apps based on category, niche definition, and feature list, builds a keyword pool, and scores each keyword. The first step of the ASO process.",
     {
       category: z
         .string()
-        .describe("App Store kategorisi (or: 'Health & Fitness', 'Productivity', 'Education')"),
+        .describe("App Store category (e.g. 'Health & Fitness', 'Productivity', 'Education')"),
       niche: z
         .string()
-        .describe("Uygulamanin nis tanimi (or: 'kalori takibi ve diyet planlama', 'to-do list ve gorev yonetimi')"),
+        .describe("App's niche definition (e.g. 'calorie tracking and diet planning', 'to-do list and task management')"),
       features: z
         .array(z.string())
-        .describe("Uygulamanin ana ozellikleri (or: ['kalori sayaci', 'barkod okuyucu', 'su takibi', 'diyet plani'])"),
+        .describe("App's main features (e.g. ['calorie counter', 'barcode scanner', 'water tracking', 'diet plan'])"),
       country: z
         .string()
         .default("tr")
-        .describe("Hedef ulke kodu"),
+        .describe("Target country code"),
       maxResults: z
         .number()
         .default(50)
-        .describe("Maksimum keyword sayisi"),
+        .describe("Maximum number of keywords"),
     },
     async ({ category, niche, features, country, maxResults }) => {
       const cacheKey = `discover:${category}:${niche}:${features.join(",")}:${country}`;
@@ -40,7 +40,7 @@ export function registerDiscoverKeywords(server: McpServer) {
       }
 
       try {
-        // ─── 1. Arama terimleri olustur ───
+        // ─── 1. Build search terms ───
         const searchTerms = [
           ...niche.split(/\s+ve\s+|\s+and\s+|,\s*/).map((t) => t.trim()).filter(Boolean),
           ...features.slice(0, 8),
@@ -48,7 +48,7 @@ export function registerDiscoverKeywords(server: McpServer) {
         ];
         const uniqueTerms = [...new Set(searchTerms)];
 
-        // ─── 2. Her terimle App Store'da ara, top app'leri topla ───
+        // ─── 2. Search App Store for each term, collect top apps ───
         const allApps = new Map<string, any>();
         const termAppMap: Record<string, string[]> = {};
 
@@ -65,11 +65,11 @@ export function registerDiscoverKeywords(server: McpServer) {
               termAppMap[term].push(a.title);
             }
           } catch {
-            // devam
+            // continue
           }
         }
 
-        // ─── 3. Top app'lerin title + description'larindan keyword cikart ───
+        // ─── 3. Extract keywords from top apps' title + description ───
         const rawKeywords = new Map<string, { count: number; sources: string[] }>();
 
         for (const [key, app] of allApps) {
@@ -93,7 +93,7 @@ export function registerDiscoverKeywords(server: McpServer) {
           }
         }
 
-        // ─── 4. App Store autocomplete onerileri ───
+        // ─── 4. App Store autocomplete suggestions ───
         for (const term of uniqueTerms.slice(0, 5)) {
           try {
             const suggestions = await getSuggestions(term);
@@ -109,11 +109,11 @@ export function registerDiscoverKeywords(server: McpServer) {
               }
             }
           } catch {
-            // devam
+            // continue
           }
         }
 
-        // ─── 5. Feature keyword'lerini ekle ───
+        // ─── 5. Add feature keywords ───
         for (const feature of features) {
           const featureWords = extractTitleKeywords(feature);
           for (const fw of featureWords) {
@@ -121,14 +121,14 @@ export function registerDiscoverKeywords(server: McpServer) {
               rawKeywords.set(fw, { count: 1, sources: ["app-feature"] });
             }
           }
-          // Feature'in kendisini de ekle
+          // Also add the feature itself
           const featureLower = feature.toLowerCase().trim();
           if (!rawKeywords.has(featureLower)) {
             rawKeywords.set(featureLower, { count: 1, sources: ["app-feature"] });
           }
         }
 
-        // ─── 6. Frekanssa gore sirala, top keyword'leri skorla ───
+        // ─── 6. Sort by frequency, score top keywords ───
         const sortedKeywords = [...rawKeywords.entries()]
           .sort((a, b) => b[1].count - a[1].count)
           .slice(0, maxResults);
@@ -152,10 +152,10 @@ export function registerDiscoverKeywords(server: McpServer) {
             );
 
             let tier: string;
-            if (oppScore >= 7) tier = "A — Yuksek firsat";
-            else if (oppScore >= 5) tier = "B — Orta firsat";
-            else if (oppScore >= 3) tier = "C — Dusuk firsat";
-            else tier = "D — Zayif";
+            if (oppScore >= 7) tier = "A — High opportunity";
+            else if (oppScore >= 5) tier = "B — Medium opportunity";
+            else if (oppScore >= 3) tier = "C — Low opportunity";
+            else tier = "D — Weak";
 
             scoredKeywords.push({
               keyword: kw,
@@ -174,15 +174,15 @@ export function registerDiscoverKeywords(server: McpServer) {
               opportunityScore: 5,
               frequency: data.count,
               sources: data.sources.slice(0, 3),
-              tier: "? — Skor alinamadi",
+              tier: "? — Score unavailable",
             });
           }
         }
 
-        // Firsata gore sirala
+        // Sort by opportunity
         scoredKeywords.sort((a, b) => b.opportunityScore - a.opportunityScore);
 
-        // ─── 7. Ozet istatistikler ───
+        // ─── 7. Summary statistics ───
         const tierA = scoredKeywords.filter((k) => k.tier.startsWith("A"));
         const tierB = scoredKeywords.filter((k) => k.tier.startsWith("B"));
 
@@ -233,7 +233,7 @@ export function registerDiscoverKeywords(server: McpServer) {
         return { content: [{ type: "text" as const, text: resultText }] };
       } catch (error: any) {
         return {
-          content: [{ type: "text" as const, text: `Hata: ${error.message}` }],
+          content: [{ type: "text" as const, text: `Error: ${error.message}` }],
           isError: true,
         };
       }

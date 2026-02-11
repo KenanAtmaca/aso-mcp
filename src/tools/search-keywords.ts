@@ -13,19 +13,19 @@ import {
 export function registerSearchKeywords(server: McpServer) {
   server.tool(
     "search_keywords",
-    "Bir keyword icin App Store'daki traffic skoru, difficulty skoru ve rakip app'leri analiz eder. ASO keyword arastirmasi icin temel tool.",
+    "Analyzes traffic score, difficulty score and competitor apps for a keyword on the App Store. The fundamental tool for ASO keyword research.",
     {
       keyword: z
         .string()
-        .describe("Arastirilacak keyword (or: 'fitness tracker', 'yapay zeka')"),
+        .describe("Keyword to research (e.g. 'fitness tracker', 'photo editor')"),
       country: z
         .string()
         .default("tr")
-        .describe("Ulke kodu (tr, us, de, gb, fr...)"),
+        .describe("Country code (tr, us, de, gb, fr...)"),
       num: z
         .number()
         .default(10)
-        .describe("Gosterilecek rakip app sayisi"),
+        .describe("Number of competitor apps to show"),
     },
     async ({ keyword, country, num }) => {
       const cacheKey = `search:${keyword}:${country}:${num}`;
@@ -69,7 +69,7 @@ export function registerSearchKeywords(server: McpServer) {
         return { content: [{ type: "text" as const, text: resultText }] };
       } catch (error: any) {
         return {
-          content: [{ type: "text" as const, text: `Hata: ${error.message}` }],
+          content: [{ type: "text" as const, text: `Error: ${error.message}` }],
           isError: true,
         };
       }

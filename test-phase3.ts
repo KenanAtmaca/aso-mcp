@@ -1,6 +1,6 @@
 /**
- * Faz 3 tool'larinin entegrasyon testi
- * Calistir: npx tsx test-phase3.ts
+ * Phase 3 tools integration test
+ * Run: npx tsx test-phase3.ts
  */
 
 import { getAppDetails, searchApps, getReviews, getSimilarApps } from "./src/data-sources/app-store.js";
@@ -32,13 +32,13 @@ function assert(condition: boolean, msg: string) {
 }
 
 async function main() {
-  console.log("\n🔧 Faz 3 — Entegrasyon Testleri\n");
+  console.log("\n🔧 Phase 3 — Integration Tests\n");
   initCache();
 
-  // ─── localized_keywords senaryosu ───
+  // ─── localized_keywords scenario ───
   console.log("🌍 localized_keywords");
 
-  await test("Keyword skorlari farkli ulkelerde", async () => {
+  await test("Keyword scores in different countries", async () => {
     const keyword = "fitness";
     const countries = ["tr", "us", "de"];
     const results: { country: string; traffic: number; difficulty: number }[] = [];
@@ -49,40 +49,40 @@ async function main() {
     }
 
     for (const r of results) {
-      assert(typeof r.traffic === "number", `${r.country} traffic olmali`);
+      assert(typeof r.traffic === "number", `${r.country} should have traffic`);
       console.log(`    ${INFO} ${getCountryName(r.country)}: traffic=${r.traffic}, difficulty=${r.difficulty}`);
     }
   });
 
-  await test("Her ulkede farkli top app", async () => {
+  await test("Different top app per country", async () => {
     const keyword = "weather";
     const countries = ["tr", "us"];
     for (const c of countries) {
       const apps = await searchApps(keyword, c, 1);
-      const topApp = (apps[0] as any)?.title || "Yok";
+      const topApp = (apps[0] as any)?.title || "None";
       console.log(`    ${INFO} ${getCountryName(c)}: #1 = "${topApp}"`);
     }
   });
 
-  // ─── get_aso_report senaryosu ───
+  // ─── get_aso_report scenario ───
   console.log("\n📋 get_aso_report");
 
-  await test("Spotify icin kapsamli ASO raporu", async () => {
+  await test("Comprehensive ASO report for Spotify", async () => {
     const app = await getAppDetails("com.spotify.client", "tr");
-    assert(app.title != null, "App bilgisi olmali");
+    assert(app.title != null, "App info should exist");
 
     // Title keywords
     const titleKeywords = extractTitleKeywords(app.title || "");
     console.log(`    ${INFO} Title: "${app.title}"`);
     console.log(`    ${INFO} Title keywords: [${titleKeywords.join(", ")}]`);
 
-    // Keyword skorlari
+    // Keyword scores
     for (const kw of titleKeywords.slice(0, 3)) {
       const scores = await getScores(kw, "tr");
       console.log(`    ${INFO} "${kw}": traffic=${scores.traffic}, difficulty=${scores.difficulty}`);
     }
 
-    // Rakipler
+    // Competitors
     const competitors = await searchApps(app.title.split(/[-:|]/)[0].trim(), "tr", 3);
     const compData = competitors
       .filter((a: any) => a.id !== app.id)
@@ -93,7 +93,7 @@ async function main() {
         reviews: a.reviews || 0,
         free: a.free ?? true,
       }));
-    console.log(`    ${INFO} Rakipler: ${compData.map((c: any) => c.title).join(", ")}`);
+    console.log(`    ${INFO} Competitors: ${compData.map((c: any) => c.title).join(", ")}`);
 
     // Scoring
     const visibility = calculateVisibilityScore({
@@ -108,7 +108,7 @@ async function main() {
       opportunityScore: opportunity,
     });
 
-    console.log(`    ${INFO} Skorlar: overall=${overall.toFixed(1)}, visibility=${visibility.toFixed(1)}, competitive=${competitive.toFixed(1)}, opportunity=${opportunity.toFixed(1)}`);
+    console.log(`    ${INFO} Scores: overall=${overall.toFixed(1)}, visibility=${visibility.toFixed(1)}, competitive=${competitive.toFixed(1)}, opportunity=${opportunity.toFixed(1)}`);
 
     // Reviews
     const reviews = await getReviews(app.id, "tr", 1);
@@ -117,17 +117,17 @@ async function main() {
       if (r.score >= 4) pos++;
       else if (r.score <= 2) neg++;
     }
-    console.log(`    ${INFO} Reviews: ${reviews.length} toplam, ${pos} pozitif, ${neg} negatif`);
+    console.log(`    ${INFO} Reviews: ${reviews.length} total, ${pos} positive, ${neg} negative`);
 
     // Metadata
     const titleLen = (app.title || "").length;
-    console.log(`    ${INFO} Title: ${titleLen}/30 karakter (${30 - titleLen} kaldi)`);
+    console.log(`    ${INFO} Title: ${titleLen}/30 chars (${30 - titleLen} remaining)`);
   });
 
-  await test("Kucuk bir app icin rapor", async () => {
+  await test("Report for a smaller app", async () => {
     // Shazam
     const app = await getAppDetails("284993459", "tr");
-    assert(app.title != null, "App bilgisi olmali");
+    assert(app.title != null, "App info should exist");
 
     const titleKeywords = extractTitleKeywords(app.title || "");
     const visibility = calculateVisibilityScore({
@@ -140,11 +140,11 @@ async function main() {
     console.log(`    ${INFO} Visibility: ${visibility.toFixed(1)}`);
   });
 
-  // ─── Sonuc ───
+  // ─── Result ───
   console.log(`\n${"─".repeat(50)}`);
-  console.log(`  ${PASS} ${passed} test basarili`);
-  if (failed > 0) console.log(`  ${FAIL} ${failed} test basarisiz`);
-  else console.log(`  🎉 Faz 3 testleri gecti!`);
+  console.log(`  ${PASS} ${passed} tests passed`);
+  if (failed > 0) console.log(`  ${FAIL} ${failed} tests failed`);
+  else console.log(`  🎉 Phase 3 tests passed!`);
   console.log(`${"─".repeat(50)}\n`);
 
   process.exit(failed > 0 ? 1 : 0);

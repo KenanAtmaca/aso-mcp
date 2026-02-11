@@ -4,32 +4,34 @@ import { getAppDetails, getReviews } from "../data-sources/app-store.js";
 import { getFromCache, setCache } from "../cache/sqlite-cache.js";
 import { CACHE_TTL } from "../utils/constants.js";
 
-// Basit sentiment keyword'leri
+// Simple sentiment keywords
 const POSITIVE_WORDS = new Set([
-  // Türkçe
+  // Turkish
   "harika", "mukemmel", "super", "guzel", "kolay", "hizli", "sevdim",
   "basarili", "kaliteli", "tavsiye", "ederim", "ideal", "faydali",
   "kullanisli", "pratik", "efektif", "begendim",
-  // İngilizce
+  // English
   "great", "amazing", "awesome", "love", "excellent", "perfect",
   "good", "best", "fantastic", "wonderful", "helpful", "easy",
   "fast", "recommend", "nice", "useful",
 ]);
 
 const NEGATIVE_WORDS = new Set([
-  // Türkçe
+  // Turkish
   "kotu", "berbat", "yavaş", "hata", "bug", "cokma", "calısmiyor",
   "bozuk", "sikiyor", "reklam", "pahali", "gereksiz", "zor",
   "karmasik", "siliyorum", "cöp", "rezalet", "felaket", "saçma",
-  // İngilizce
+  // English
   "bad", "terrible", "awful", "hate", "worst", "horrible", "slow",
   "crash", "bug", "broken", "ads", "expensive", "useless",
   "annoying", "frustrating", "delete", "uninstall",
 ]);
 
 const FEATURE_INDICATORS = [
+  // Turkish
   "eklensin", "eklenmeli", "olsa", "istiyorum", "lazim", "gerek",
   "olmali", "bekliyorum", "güncelleme", "özellik",
+  // English
   "should", "please add", "would be nice", "wish", "need", "want",
   "feature request", "missing",
 ];
@@ -71,19 +73,19 @@ function extractKeywords(text: string): string[] {
 export function registerAnalyzeReviews(server: McpServer) {
   server.tool(
     "analyze_reviews",
-    "Bir uygulamanin kullanici yorumlarindan sentiment analizi yapar, sikayetleri ve feature request'leri cikarir. ASO icin keyword insight'lari sunar.",
+    "Performs sentiment analysis on an app's user reviews, extracts complaints and feature requests. Provides keyword insights for ASO.",
     {
       appId: z
         .string()
-        .describe("App Store app ID veya bundle ID"),
+        .describe("App Store app ID or bundle ID"),
       country: z
         .string()
         .default("tr")
-        .describe("Ulke kodu"),
+        .describe("Country code"),
       pages: z
         .number()
         .default(3)
-        .describe("Cekilecek yorum sayfasi sayisi (her sayfa ~50 yorum)"),
+        .describe("Number of review pages to fetch (each page ~50 reviews)"),
     },
     async ({ appId, country, pages }) => {
       const cacheKey = `reviews:${appId}:${country}:${pages}`;
@@ -93,18 +95,18 @@ export function registerAnalyzeReviews(server: McpServer) {
       }
 
       try {
-        // App bilgisini al (numeric ID gerekli)
+        // Get app info (numeric ID required)
         const app = await getAppDetails(appId, country);
         const numericId = app.id;
 
-        // Yorumları çek
+        // Fetch reviews
         const allReviews: any[] = [];
         for (let page = 1; page <= pages; page++) {
           try {
             const pageReviews = await getReviews(numericId, country, page);
             allReviews.push(...pageReviews);
           } catch {
-            break; // daha fazla sayfa yok
+            break; // no more pages
           }
         }
 
@@ -115,14 +117,14 @@ export function registerAnalyzeReviews(server: McpServer) {
                 type: "text" as const,
                 text: JSON.stringify({
                   appId,
-                  message: "Bu uygulama icin yorum bulunamadi.",
+                  message: "No reviews found for this app.",
                 }),
               },
             ],
           };
         }
 
-        // Sentiment analizi
+        // Sentiment analysis
         let positive = 0;
         let negative = 0;
         let neutral = 0;
@@ -141,14 +143,14 @@ export function registerAnalyzeReviews(server: McpServer) {
           else if (sentiment === "negative") negative++;
           else neutral++;
 
-          // Şikayetler (negatif review'lar)
+          // Complaints (negative reviews)
           if (sentiment === "negative" && text.length > 10) {
             complaints.push(
               text.length > 150 ? text.slice(0, 150) + "..." : text
             );
           }
 
-          // Feature request'ler
+          // Feature requests
           if (isFeatureRequest(fullText)) {
             featureRequests.push(
               fullText.length > 150 ? fullText.slice(0, 150) + "..." : fullText
@@ -161,13 +163,13 @@ export function registerAnalyzeReviews(server: McpServer) {
           }
         }
 
-        // En çok geçen keyword'ler (ASO insight)
+        // Most frequent keywords (ASO insight)
         const keywordInsights = Object.entries(keywordMap)
           .sort((a, b) => b[1] - a[1])
           .slice(0, 20)
           .map(([keyword, count]) => ({ keyword, count }));
 
-        // Rating dağılımı
+        // Rating distribution
         const ratingDist: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
         for (const review of allReviews) {
           const score = review.score || review.rating;
@@ -202,7 +204,7 @@ export function registerAnalyzeReviews(server: McpServer) {
         return { content: [{ type: "text" as const, text: resultText }] };
       } catch (error: any) {
         return {
-          content: [{ type: "text" as const, text: `Hata: ${error.message}` }],
+          content: [{ type: "text" as const, text: `Error: ${error.message}` }],
           isError: true,
         };
       }

@@ -14,28 +14,28 @@ import {
 export function registerGenerateAsoBrief(server: McpServer) {
   server.tool(
     "generate_aso_brief",
-    "Yeni bir uygulama icin komple ASO brief olusturur. Uygulamanin adi, kategorisi, ozellikleri ve hedef kitlesinden yola cikarak: skorlanmis keyword havuzu, rakip pattern analizi, title/subtitle/keyword field icin yapilandirilmis oneriler ve karakter limitleri sunar. AI'in dogrudan ASO icerigi uretebilmesi icin hazir brief.",
+    "Generates a complete ASO brief for a new app. Based on the app's name, category, features, and target audience, it provides: a scored keyword pool, competitor pattern analysis, structured suggestions for title/subtitle/keyword field, and character limits. A ready-made brief for AI to directly produce ASO content.",
     {
       appName: z
         .string()
-        .describe("Uygulamanin adi"),
+        .describe("App name"),
       category: z
         .string()
-        .describe("App Store kategorisi (or: 'Health & Fitness', 'Productivity')"),
+        .describe("App Store category (e.g. 'Health & Fitness', 'Productivity')"),
       features: z
         .array(z.string())
-        .describe("Uygulamanin ana ozellikleri"),
+        .describe("App's main features"),
       targetAudience: z
         .string()
-        .describe("Hedef kitle tanimi (or: 'diyet yapan kadinlar 25-40 yas', 'universite ogrencileri')"),
+        .describe("Target audience description (e.g. 'women on a diet aged 25-40', 'college students')"),
       countries: z
         .array(z.string())
         .default(["tr"])
-        .describe("Hedef ulkeler"),
+        .describe("Target countries"),
       competitorAppIds: z
         .array(z.string())
         .default([])
-        .describe("Bilinen rakip app ID'leri (opsiyonel)"),
+        .describe("Known competitor app IDs (optional)"),
     },
     async ({ appName, category, features, targetAudience, countries, competitorAppIds }) => {
       const cacheKey = `brief:${appName}:${category}:${countries.join(",")}`;
@@ -47,8 +47,8 @@ export function registerGenerateAsoBrief(server: McpServer) {
       try {
         const primaryCountry = countries[0] || "tr";
 
-        // ─── 1. Keyword kesfi ───
-        // Arama terimleri: ozellikler + kategori + nis kombinasyonlari
+        // ─── 1. Keyword discovery ───
+        // Search terms: features + category + niche combinations
         const searchTerms = [
           ...features.slice(0, 6),
           category,
@@ -60,7 +60,7 @@ export function registerGenerateAsoBrief(server: McpServer) {
           { traffic: number; difficulty: number; source: string }
         >();
 
-        // Feature ve kategori bazli arama
+        // Feature and category based search
         for (const term of searchTerms.slice(0, 8)) {
           try {
             const apps = await searchApps(term, primaryCountry, 8);
@@ -74,11 +74,11 @@ export function registerGenerateAsoBrief(server: McpServer) {
               }
             }
           } catch {
-            // devam
+            // continue
           }
         }
 
-        // Autocomplete onerileri
+        // Autocomplete suggestions
         for (const term of features.slice(0, 4)) {
           try {
             const suggestions = await getSuggestions(term);
@@ -91,11 +91,11 @@ export function registerGenerateAsoBrief(server: McpServer) {
               }
             }
           } catch {
-            // devam
+            // continue
           }
         }
 
-        // Feature'lerin kendilerini ekle
+        // Add features themselves
         for (const f of features) {
           const fl = f.toLowerCase().trim();
           if (!keywordPool.has(fl)) {
@@ -103,7 +103,7 @@ export function registerGenerateAsoBrief(server: McpServer) {
           }
         }
 
-        // Keyword'leri skorla
+        // Score keywords
         const scoredPool: {
           keyword: string;
           traffic: number;
@@ -137,7 +137,7 @@ export function registerGenerateAsoBrief(server: McpServer) {
 
         scoredPool.sort((a, b) => b.opportunityScore - a.opportunityScore);
 
-        // ─── 2. Rakip analizi ───
+        // ─── 2. Competitor analysis ───
         const competitorData: {
           title: string;
           subtitle: string;
@@ -148,7 +148,7 @@ export function registerGenerateAsoBrief(server: McpServer) {
           titleLength: number;
         }[] = [];
 
-        // Bilinen rakipler
+        // Known competitors
         for (const cId of competitorAppIds.slice(0, 3)) {
           try {
             const comp = await getAppDetails(cId, primaryCountry);
@@ -162,11 +162,11 @@ export function registerGenerateAsoBrief(server: McpServer) {
               titleLength: (comp.title || "").length,
             });
           } catch {
-            // devam
+            // continue
           }
         }
 
-        // Top arama sonuclari da rakip olarak ekle
+        // Also add top search results as competitors
         if (competitorData.length < 5) {
           try {
             const topApps = await searchApps(features[0] || category, primaryCountry, 5);
@@ -185,11 +185,11 @@ export function registerGenerateAsoBrief(server: McpServer) {
               });
             }
           } catch {
-            // devam
+            // continue
           }
         }
 
-        // Rakip keyword pattern'lari
+        // Competitor keyword patterns
         const competitorKeywordFreq: Record<string, number> = {};
         for (const comp of competitorData) {
           for (const kw of comp.titleKeywords) {
@@ -208,7 +208,7 @@ export function registerGenerateAsoBrief(server: McpServer) {
             )
           : 0;
 
-        // ─── 3. Rekabet durumu ───
+        // ─── 3. Competition level ───
         const competitiveScore = calculateCompetitiveScore(
           competitorData.map((c) => ({
             rating: c.rating,
@@ -217,22 +217,22 @@ export function registerGenerateAsoBrief(server: McpServer) {
           }))
         );
 
-        // ─── 4. Title/Subtitle/Keyword field onerileri ───
+        // ─── 4. Title/Subtitle/Keyword field suggestions ───
         const topKeywords = scoredPool
           .filter((k) => k.traffic > 0)
           .slice(0, 20);
 
-        // Title icin en yuksek traffic keyword'ler
+        // Highest traffic keywords for title
         const titleCandidates = topKeywords
           .slice(0, 5)
           .map((k) => k.keyword);
 
-        // Subtitle icin siradaki keyword'ler
+        // Next keywords for subtitle
         const subtitleCandidates = topKeywords
           .slice(3, 10)
           .map((k) => k.keyword);
 
-        // Keyword field icin kalanlar
+        // Remaining for keyword field
         const usedInTitleSubtitle = new Set([
           ...titleCandidates,
           ...subtitleCandidates,
@@ -241,7 +241,7 @@ export function registerGenerateAsoBrief(server: McpServer) {
           .filter((k) => !usedInTitleSubtitle.has(k.keyword))
           .map((k) => k.keyword);
 
-        // ─── 5. Coklu pazar analizi ───
+        // ─── 5. Multi-market analysis ───
         const marketAnalysis: {
           country: string;
           countryName: string;
@@ -282,7 +282,7 @@ export function registerGenerateAsoBrief(server: McpServer) {
           });
         }
 
-        // ─── 6. Brief olustur ───
+        // ─── 6. Build brief ───
         const result = {
           appName,
           category,
@@ -295,10 +295,10 @@ export function registerGenerateAsoBrief(server: McpServer) {
             competitiveScore: Math.round(competitiveScore * 10) / 10,
             level:
               competitiveScore > 7
-                ? "Yuksek rekabet"
+                ? "High competition"
                 : competitiveScore > 4
-                ? "Orta rekabet"
-                : "Dusuk rekabet",
+                ? "Medium competition"
+                : "Low competition",
             competitors: competitorData,
             commonCompetitorKeywords,
             avgCompetitorTitleLength,
@@ -313,23 +313,23 @@ export function registerGenerateAsoBrief(server: McpServer) {
           metadataGuidelines: {
             title: {
               maxLength: CHAR_LIMITS.TITLE,
-              recommendation: `"${appName}" + en yuksek traffic keyword. Rakipler ortalama ${avgCompetitorTitleLength} karakter kullanıyor.`,
+              recommendation: `"${appName}" + highest traffic keyword. Competitors use ${avgCompetitorTitleLength} chars on average.`,
               candidateKeywords: titleCandidates,
               pattern: `${appName} - [keyword1] [keyword2]`,
               examples: competitorData.slice(0, 3).map((c) => c.title),
             },
             subtitle: {
               maxLength: CHAR_LIMITS.SUBTITLE,
-              recommendation: "Title'da olmayan yuksek traffic keyword'leri kullan.",
+              recommendation: "Use high traffic keywords that are not in the title.",
               candidateKeywords: subtitleCandidates,
             },
             keywordField: {
               maxLength: CHAR_LIMITS.KEYWORD_FIELD,
-              recommendation: "Title ve subtitle'da olmayan keyword'leri virgul ile ayir. Bosluk kullanma.",
+              recommendation: "Separate keywords not in title and subtitle with commas. Do not use spaces.",
               candidateKeywords: keywordFieldCandidates,
             },
             description: {
-              recommendation: "Ilk 3 cumle kritik — en onemli keyword'leri buraya yerlestir. Apple artik description'i da keyword analizi icin kullaniyor.",
+              recommendation: "First 3 sentences are critical — place the most important keywords here. Apple now also uses the description for keyword analysis.",
               mustIncludeKeywords: topKeywords.slice(0, 8).map((k) => k.keyword),
             },
           },
@@ -337,12 +337,12 @@ export function registerGenerateAsoBrief(server: McpServer) {
           marketAnalysis,
 
           actionPlan: [
-            `1. Title olustur: "${appName}" + [${titleCandidates.slice(0, 2).join(", ")}] (max ${CHAR_LIMITS.TITLE} karakter)`,
-            `2. Subtitle olustur: [${subtitleCandidates.slice(0, 3).join(", ")}] (max ${CHAR_LIMITS.SUBTITLE} karakter)`,
-            `3. Keyword field doldur: ${keywordFieldCandidates.slice(0, 5).join(",")} (max ${CHAR_LIMITS.KEYWORD_FIELD} karakter, virgul ayracli)`,
-            `4. Aciklama yaz: Ilk 3 cumlede [${topKeywords.slice(0, 3).map((k) => k.keyword).join(", ")}] keyword'lerini kullan`,
-            `5. ${countries.length > 1 ? `${countries.length} pazar icin lokalize et` : "Tek pazar odakli optimize et"}`,
-            `6. Rakiplerin pattern'ini takip et: ${commonCompetitorKeywords.slice(0, 5).join(", ") || "benzersiz alan"}`,
+            `1. Create title: "${appName}" + [${titleCandidates.slice(0, 2).join(", ")}] (max ${CHAR_LIMITS.TITLE} chars)`,
+            `2. Create subtitle: [${subtitleCandidates.slice(0, 3).join(", ")}] (max ${CHAR_LIMITS.SUBTITLE} chars)`,
+            `3. Fill keyword field: ${keywordFieldCandidates.slice(0, 5).join(",")} (max ${CHAR_LIMITS.KEYWORD_FIELD} chars, comma-separated)`,
+            `4. Write description: Use [${topKeywords.slice(0, 3).map((k) => k.keyword).join(", ")}] keywords in the first 3 sentences`,
+            `5. ${countries.length > 1 ? `Localize for ${countries.length} markets` : "Optimize for single market"}`,
+            `6. Follow competitor patterns: ${commonCompetitorKeywords.slice(0, 5).join(", ") || "unique space"}`,
           ],
         };
 
@@ -352,7 +352,7 @@ export function registerGenerateAsoBrief(server: McpServer) {
         return { content: [{ type: "text" as const, text: resultText }] };
       } catch (error: any) {
         return {
-          content: [{ type: "text" as const, text: `Hata: ${error.message}` }],
+          content: [{ type: "text" as const, text: `Error: ${error.message}` }],
           isError: true,
         };
       }

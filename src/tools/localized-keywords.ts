@@ -9,18 +9,18 @@ import { getCountryName } from "../utils/localization.js";
 export function registerLocalizedKeywords(server: McpServer) {
   server.tool(
     "localized_keywords",
-    "Bir keyword setini farkli pazarlara adapte eder. Her ulke icin keyword skorlarini (traffic/difficulty) getirir ve o pazardaki ust siradaki uygulamalari gosterir. Coklu ulke ASO stratejisi icin kullanilir.",
+    "Adapts a set of keywords to different markets. Retrieves keyword scores (traffic/difficulty) for each country and shows top-ranking apps in each market. Used for multi-country ASO strategy.",
     {
       keywords: z
         .array(z.string())
-        .describe("Analiz edilecek keyword listesi"),
+        .describe("List of keywords to analyze"),
       sourceCountry: z
         .string()
         .default("tr")
-        .describe("Kaynak ulke kodu"),
+        .describe("Source country code"),
       targetCountries: z
         .array(z.string())
-        .describe("Hedef ulke kodlari (or: ['us', 'de', 'gb', 'fr'])"),
+        .describe("Target country codes (e.g. ['us', 'de', 'gb', 'fr'])"),
     },
     async ({ keywords, sourceCountry, targetCountries }) => {
       const allCountries = [
@@ -59,13 +59,13 @@ export function registerLocalizedKeywords(server: McpServer) {
             try {
               const scores = await getScores(keyword, country);
 
-              // O keyword'de ilk uygulamayı al
+              // Get the top app for this keyword
               let topApp = "";
               try {
                 const apps = await searchApps(keyword, country, 1);
                 topApp = (apps[0] as any)?.title || "";
               } catch {
-                // devam
+                // continue
               }
 
               kwResults.push({
@@ -103,10 +103,10 @@ export function registerLocalizedKeywords(server: McpServer) {
           });
         }
 
-        // Ulkeleri ortalama traffic'e gore sirala
+        // Sort countries by average traffic
         localizations.sort((a, b) => b.avgTraffic - a.avgTraffic);
 
-        // Keyword bazli cross-country karsilastirma
+        // Keyword-based cross-country comparison
         const crossCountry: Record<
           string,
           { country: string; traffic: number; difficulty: number }[]
@@ -137,7 +137,7 @@ export function registerLocalizedKeywords(server: McpServer) {
         return { content: [{ type: "text" as const, text: resultText }] };
       } catch (error: any) {
         return {
-          content: [{ type: "text" as const, text: `Hata: ${error.message}` }],
+          content: [{ type: "text" as const, text: `Error: ${error.message}` }],
           isError: true,
         };
       }

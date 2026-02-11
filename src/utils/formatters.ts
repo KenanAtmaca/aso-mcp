@@ -3,15 +3,15 @@ export function formatScore(score: number): string {
 }
 
 export function formatCompetitionLevel(difficulty: number): string {
-  if (difficulty > 7) return "Yuksek";
-  if (difficulty > 4) return "Orta";
-  return "Dusuk";
+  if (difficulty > 7) return "High";
+  if (difficulty > 4) return "Medium";
+  return "Low";
 }
 
 export function formatTrafficLevel(traffic: number): string {
-  if (traffic > 7) return "Yuksek";
-  if (traffic > 4) return "Orta";
-  return "Dusuk";
+  if (traffic > 7) return "High";
+  if (traffic > 4) return "Medium";
+  return "Low";
 }
 
 export function generateRecommendation(scores: {
@@ -19,13 +19,13 @@ export function generateRecommendation(scores: {
   difficulty: number;
 }): string {
   if (scores.traffic > 6 && scores.difficulty < 5) {
-    return "Mukemmel firsat! Yuksek traffic, dusuk rekabet.";
+    return "Excellent opportunity! High traffic, low competition.";
   } else if (scores.traffic > 6 && scores.difficulty > 6) {
-    return "Yuksek traffic ama rekabet de yuksek. Long-tail varyasyonlari dene.";
+    return "High traffic but competition is also high. Try long-tail variations.";
   } else if (scores.traffic < 4 && scores.difficulty < 4) {
-    return "Dusuk traffic, dusuk rekabet. Nis keyword — ek keyword'lerle destekle.";
+    return "Low traffic, low competition. Niche keyword — support with additional keywords.";
   } else {
-    return "Traffic dusuk, rekabet yuksek. Alternatif keyword'lere yonel.";
+    return "Low traffic, high competition. Consider alternative keywords.";
   }
 }
 
