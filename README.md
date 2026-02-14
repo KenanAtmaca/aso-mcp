@@ -23,7 +23,7 @@ npm install -g aso-mcp
 
 ## Why aso-mcp?
 
-- **13 specialized ASO tools** — from keyword discovery to complete ASO briefs
+- **18 specialized ASO tools** — from keyword discovery to App Store Connect metadata management
 - **Real App Store data** — live search results, ratings, reviews, and suggestions
 - **Custom scoring engine** — proprietary algorithm independent of Apple Search Ads API issues
 - **No API key needed** — zero configuration, install and go
@@ -114,6 +114,39 @@ Any MCP-compatible client (ChatGPT, Cursor, Windsurf, etc.) can connect via stdi
 | `discover_keywords` | Keyword discovery from scratch for a new app |
 | `generate_aso_brief` | Complete ASO brief with keyword pool, competitor patterns, and metadata suggestions |
 
+### Phase 5 — App Store Connect
+
+Directly read and update your app's metadata on App Store Connect without leaving the AI assistant.
+
+| Tool | Description |
+|------|-------------|
+| `connect_setup` | Configure & validate App Store Connect API credentials |
+| `connect_get_app` | Find app by bundle ID, get ASC ID + version status |
+| `connect_get_metadata` | Read current metadata (title, subtitle, keywords, description) for a locale |
+| `connect_update_metadata` | Update metadata with character limit validation + before/after diff |
+| `connect_list_localizations` | List all locales and metadata completeness status |
+
+<details>
+<summary>App Store Connect Setup</summary>
+
+Requires an [App Store Connect API Key](https://developer.apple.com/documentation/appstoreconnectapi/creating_api_keys_for_app_store_connect_api):
+
+**Option A — Environment variables:**
+```bash
+export ASC_ISSUER_ID="your-issuer-id"
+export ASC_KEY_ID="your-key-id"
+export ASC_PRIVATE_KEY_PATH="/path/to/AuthKey_XXXXX.p8"
+```
+
+**Option B — Use the setup tool:**
+```
+"Set up App Store Connect with issuer ID xxx, key ID yyy, and key at /path/to/AuthKey.p8"
+```
+
+Credentials are saved to `~/.aso-mcp/connect-config.json` for future sessions.
+
+</details>
+
 ### Utility
 
 | Tool | Description |
@@ -140,6 +173,10 @@ Just ask your AI assistant naturally:
 "Suggest title and subtitle for my fitness app targeting: workout, training, exercise"
 
 "Discover keywords for a new calorie tracking app"
+
+"Update my app's subtitle to 'AI Workout Planner' on App Store Connect"
+
+"Show all locales and metadata status for my app"
 ```
 
 ## Scoring Algorithm
