@@ -2,6 +2,12 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Package Info
+
+- **npm:** https://www.npmjs.com/package/aso-mcp
+- **GitHub:** https://github.com/KenanAtmaca/aso-mcp
+- **Install:** `npm install -g aso-mcp` or `npx aso-mcp`
+
 ## Build & Run Commands
 
 ```bash
@@ -13,6 +19,13 @@ npx tsx test.ts              # Core test suite (17 tests — cache, scoring, scr
 npx tsx test-generation.ts   # ASO generation scenario tests
 npx tsx test-phase3.ts       # Localization & report tests
 npx tsx test-connect.ts      # App Store Connect tests (locale mapping + optional live API)
+```
+
+## Publishing
+
+```bash
+npm version patch|minor|major   # Bump version + git commit + tag
+npm publish --access public     # Publish to npm (requires auth token)
 ```
 
 ## Architecture
