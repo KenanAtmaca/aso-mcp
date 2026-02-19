@@ -11,11 +11,14 @@ export function registerGetAppDetails(server: McpServer) {
     {
       appId: z
         .string()
+        .min(1)
         .describe(
           "App Store app ID or bundle ID (e.g. '324684580' or 'com.spotify.client')"
         ),
       country: z
         .string()
+        .min(2)
+        .max(5)
         .default("tr")
         .describe("Country code (tr, us, de, gb, fr...)"),
       includeSimilar: z

@@ -24,7 +24,7 @@
   },
   "homepage": "https://github.com/kenanatmaca/aso-mcp#readme",
   "dependencies": {
-    "@modelcontextprotocol/sdk": "latest",
+    "@modelcontextprotocol/sdk": "^1.26.0",
     "app-store-scraper": "^0.18.0",
     "aso": "^1.1.1",
     "better-sqlite3": "^12.6.2",

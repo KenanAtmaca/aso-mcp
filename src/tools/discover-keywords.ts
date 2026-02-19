@@ -16,19 +16,27 @@ export function registerDiscoverKeywords(server: McpServer) {
     {
       category: z
         .string()
+        .min(1)
         .describe("App Store category (e.g. 'Health & Fitness', 'Productivity', 'Education')"),
       niche: z
         .string()
+        .min(1)
         .describe("App's niche definition (e.g. 'calorie tracking and diet planning', 'to-do list and task management')"),
       features: z
-        .array(z.string())
+        .array(z.string().min(1))
+        .min(1)
+        .max(20)
         .describe("App's main features (e.g. ['calorie counter', 'barcode scanner', 'water tracking', 'diet plan'])"),
       country: z
         .string()
+        .min(2)
+        .max(5)
         .default("tr")
         .describe("Target country code"),
       maxResults: z
         .number()
+        .min(10)
+        .max(100)
         .default(50)
         .describe("Maximum number of keywords"),
     },

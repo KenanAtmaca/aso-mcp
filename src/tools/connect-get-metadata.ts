@@ -7,10 +7,11 @@ import { CACHE_TTL, CHAR_LIMITS } from "../utils/constants.js";
 export function registerConnectGetMetadata(server: McpServer) {
   server.tool(
     "connect_get_metadata",
-    "Belirli bir locale için mevcut ASO metadata'sını getir",
+    "Get current ASO metadata for a specific locale from App Store Connect",
     {
       appId: z
         .string()
+        .min(1)
         .describe("App Store Connect app ID (from connect_get_app)"),
       locale: z
         .string()

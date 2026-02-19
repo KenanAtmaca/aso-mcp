@@ -7,9 +7,12 @@ import { CACHE_TTL } from "../utils/constants.js";
 // Simple sentiment keywords
 const POSITIVE_WORDS = new Set([
   // Turkish
-  "harika", "mukemmel", "super", "guzel", "kolay", "hizli", "sevdim",
-  "basarili", "kaliteli", "tavsiye", "ederim", "ideal", "faydali",
-  "kullanisli", "pratik", "efektif", "begendim",
+  "harika", "mükemmel", "süper", "güzel", "kolay", "hızlı", "sevdim",
+  "başarılı", "kaliteli", "tavsiye", "ederim", "ideal", "faydalı",
+  "kullanışlı", "pratik", "efektif", "beğendim",
+  // Turkish (without diacritics — users often type without them)
+  "mukemmel", "super", "guzel", "hizli", "basarili", "faydali",
+  "kullanisli", "begendim",
   // English
   "great", "amazing", "awesome", "love", "excellent", "perfect",
   "good", "best", "fantastic", "wonderful", "helpful", "easy",
@@ -18,9 +21,12 @@ const POSITIVE_WORDS = new Set([
 
 const NEGATIVE_WORDS = new Set([
   // Turkish
-  "kotu", "berbat", "yavaş", "hata", "bug", "cokma", "calısmiyor",
-  "bozuk", "sikiyor", "reklam", "pahali", "gereksiz", "zor",
-  "karmasik", "siliyorum", "cöp", "rezalet", "felaket", "saçma",
+  "kötü", "berbat", "yavaş", "hata", "bug", "çökme", "çalışmıyor",
+  "bozuk", "sıkıyor", "reklam", "pahalı", "gereksiz", "zor",
+  "karmaşık", "siliyorum", "çöp", "rezalet", "felaket", "saçma",
+  // Turkish (without diacritics)
+  "kotu", "cokma", "calısmiyor", "calismıyor", "calismiyor",
+  "sikiyor", "pahali", "karmasik", "cop",
   // English
   "bad", "terrible", "awful", "hate", "worst", "horrible", "slow",
   "crash", "bug", "broken", "ads", "expensive", "useless",
@@ -77,13 +83,18 @@ export function registerAnalyzeReviews(server: McpServer) {
     {
       appId: z
         .string()
+        .min(1)
         .describe("App Store app ID or bundle ID"),
       country: z
         .string()
+        .min(2)
+        .max(5)
         .default("tr")
         .describe("Country code"),
       pages: z
         .number()
+        .min(1)
+        .max(10)
         .default(3)
         .describe("Number of review pages to fetch (each page ~50 reviews)"),
     },

@@ -7,10 +7,11 @@ import { CACHE_TTL } from "../utils/constants.js";
 export function registerConnectGetApp(server: McpServer) {
   server.tool(
     "connect_get_app",
-    "Bundle ID ile uygulama bul, ASC ID ve versiyon durumunu göster",
+    "Find app by bundle ID, get App Store Connect ID and version state",
     {
       bundleId: z
         .string()
+        .min(1)
         .describe("App bundle ID (e.g. 'com.spotify.client')"),
     },
     async ({ bundleId }) => {

@@ -4,15 +4,17 @@ import {
   loadConfig,
   updateMetadata,
 } from "../data-sources/app-store-connect.js";
+import { deleteCache } from "../cache/sqlite-cache.js";
 import { CHAR_LIMITS } from "../utils/constants.js";
 
 export function registerConnectUpdateMetadata(server: McpServer) {
   server.tool(
     "connect_update_metadata",
-    "ASO metadata alanlarını App Store Connect'te güncelle",
+    "Update ASO metadata fields in App Store Connect with character limit validation and diff output",
     {
       appId: z
         .string()
+        .min(1)
         .describe("App Store Connect app ID"),
       locale: z
         .string()
@@ -70,9 +72,9 @@ export function registerConnectUpdateMetadata(server: McpServer) {
         const warnings: string[] = [];
         const errors: string[] = [];
 
-        if (name !== undefined && name.length > CHAR_LIMITS.SUBTITLE) {
+        if (name !== undefined && name.length > CHAR_LIMITS.TITLE) {
           errors.push(
-            `Name exceeds ${CHAR_LIMITS.SUBTITLE} char limit (${name.length} chars)`
+            `Name exceeds ${CHAR_LIMITS.TITLE} char limit (${name.length} chars)`
           );
         }
         if (subtitle !== undefined && subtitle.length > CHAR_LIMITS.SUBTITLE) {
@@ -157,8 +159,15 @@ export function registerConnectUpdateMetadata(server: McpServer) {
           updates
         );
 
+        // Invalidate cached metadata and localizations for this app
+        deleteCache(`connect-metadata:${appId}:%`);
+        deleteCache(`connect-localizations:${appId}`);
+
         // Build diff
         const diff: Record<string, { before: string | null; after: string | null }> = {};
+        if (name !== undefined) {
+          diff.name = { before: before.name ?? null, after: after.name ?? null };
+        }
         if (subtitle !== undefined) {
           diff.subtitle = { before: before.subtitle, after: after.subtitle };
         }

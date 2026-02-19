@@ -11,6 +11,7 @@ export function registerSuggestKeywords(server: McpServer) {
     {
       appId: z
         .string()
+        .min(1)
         .describe("App Store app ID (e.g. 'com.spotify.client' or '324684580')"),
       strategy: z
         .enum(["category", "similar", "competition", "all"])
@@ -18,10 +19,14 @@ export function registerSuggestKeywords(server: McpServer) {
         .describe("Keyword suggestion strategy"),
       country: z
         .string()
+        .min(2)
+        .max(5)
         .default("tr")
         .describe("Country code (tr, us, de, gb, fr...)"),
       num: z
         .number()
+        .min(1)
+        .max(50)
         .default(20)
         .describe("Number of keywords to suggest per strategy"),
     },
@@ -38,15 +43,21 @@ export function registerSuggestKeywords(server: McpServer) {
             ? (["category", "similar", "competition"] as const)
             : ([strategy] as const);
 
-        const allKeywords: Record<string, string[]> = {};
+        // Run all strategies in parallel
+        const strategyResults = await Promise.all(
+          strategies.map(async (s) => {
+            try {
+              const keywords = await suggestKeywords(appId, s, country, num);
+              return { strategy: s, keywords };
+            } catch {
+              return { strategy: s, keywords: [] as string[] };
+            }
+          })
+        );
 
-        for (const s of strategies) {
-          try {
-            const keywords = await suggestKeywords(appId, s, country, num);
-            allKeywords[s] = keywords;
-          } catch {
-            allKeywords[s] = [];
-          }
+        const allKeywords: Record<string, string[]> = {};
+        for (const r of strategyResults) {
+          allKeywords[r.strategy] = r.keywords;
         }
 
         // Get scores for unique keywords (in parallel)

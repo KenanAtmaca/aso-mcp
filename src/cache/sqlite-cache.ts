@@ -3,6 +3,8 @@ import path from "path";
 import os from "os";
 import fs from "fs";
 
+const MAX_CACHE_ENTRIES = 5000;
+
 let db: Database.Database;
 
 export function initCache(): void {
@@ -27,6 +29,9 @@ export function initCache(): void {
 
   // Clean up expired entries
   db.exec(`DELETE FROM cache WHERE expires_at < strftime('%s', 'now')`);
+
+  // Enforce size limit on startup
+  enforceSizeLimit();
 }
 
 export function getFromCache(key: string): string | null {
@@ -48,6 +53,18 @@ export function setCache(
   db.prepare(
     "INSERT OR REPLACE INTO cache (key, value, expires_at) VALUES (?, ?, ?)"
   ).run(key, value, expiresAt);
+
+  // Periodic size check (every ~100 writes, check and trim)
+  const count = (
+    db.prepare("SELECT COUNT(*) as count FROM cache").get() as { count: number }
+  ).count;
+  if (count > MAX_CACHE_ENTRIES) {
+    enforceSizeLimit();
+  }
+}
+
+export function deleteCache(keyPattern: string): void {
+  db.prepare("DELETE FROM cache WHERE key LIKE ?").run(keyPattern);
 }
 
 export function clearCache(): void {
@@ -57,6 +74,7 @@ export function clearCache(): void {
 export function getCacheStats(): {
   totalEntries: number;
   expiredEntries: number;
+  maxEntries: number;
   dbPath: string;
 } {
   const total = db
@@ -71,6 +89,26 @@ export function getCacheStats(): {
   return {
     totalEntries: total.count,
     expiredEntries: expired.count,
+    maxEntries: MAX_CACHE_ENTRIES,
     dbPath: path.join(os.homedir(), ".aso-mcp", "cache.db"),
   };
+}
+
+function enforceSizeLimit(): void {
+  // First remove expired entries
+  db.exec(`DELETE FROM cache WHERE expires_at < strftime('%s', 'now')`);
+
+  const count = (
+    db.prepare("SELECT COUNT(*) as count FROM cache").get() as { count: number }
+  ).count;
+
+  if (count > MAX_CACHE_ENTRIES) {
+    // Remove oldest entries (by created_at) to get back under limit
+    const toRemove = count - MAX_CACHE_ENTRIES;
+    db.prepare(
+      `DELETE FROM cache WHERE key IN (
+        SELECT key FROM cache ORDER BY created_at ASC LIMIT ?
+      )`
+    ).run(toRemove);
+  }
 }

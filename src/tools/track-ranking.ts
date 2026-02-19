@@ -11,12 +11,17 @@ export function registerTrackRanking(server: McpServer) {
     {
       appId: z
         .string()
+        .min(1)
         .describe("App Store app ID or bundle ID (e.g. 'com.spotify.client')"),
       keywords: z
-        .array(z.string())
-        .describe("List of keywords to track"),
+        .array(z.string().min(1))
+        .min(1)
+        .max(20)
+        .describe("List of keywords to track (max 20)"),
       country: z
         .string()
+        .min(2)
+        .max(5)
         .default("tr")
         .describe("Country code"),
     },
@@ -49,9 +54,7 @@ export function registerTrackRanking(server: McpServer) {
               const resultId = String(result.id || "");
               if (
                 resultAppId === normalizedAppId ||
-                resultId === appId ||
-                resultAppId.includes(normalizedAppId) ||
-                normalizedAppId.includes(resultAppId)
+                resultId === appId
               ) {
                 position = i + 1;
                 break;

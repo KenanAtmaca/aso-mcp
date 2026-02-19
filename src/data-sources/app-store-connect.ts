@@ -50,11 +50,26 @@ export function saveConfig(config: ConnectConfig): void {
   fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2), "utf-8");
 }
 
-// ─── JWT Token Generation ───
+// ─── JWT Token Generation (with caching) ───
+
+let cachedToken: string | null = null;
+let cachedTokenExpiry = 0;
+let cachedTokenConfigKey = "";
 
 function generateToken(config: ConnectConfig): string {
-  const privateKey = fs.readFileSync(config.privateKeyPath, "utf-8");
+  const configKey = `${config.issuerId}:${config.apiKeyId}`;
   const now = Math.floor(Date.now() / 1000);
+
+  // Reuse cached token if valid (with 2 min safety margin)
+  if (
+    cachedToken &&
+    cachedTokenConfigKey === configKey &&
+    now < cachedTokenExpiry - 120
+  ) {
+    return cachedToken;
+  }
+
+  const privateKey = fs.readFileSync(config.privateKeyPath, "utf-8");
 
   const payload = {
     iss: config.issuerId,
@@ -63,7 +78,7 @@ function generateToken(config: ConnectConfig): string {
     aud: "appstoreconnect-v1",
   };
 
-  return jwt.sign(payload, privateKey, {
+  cachedToken = jwt.sign(payload, privateKey, {
     algorithm: "ES256",
     header: {
       alg: "ES256",
@@ -71,6 +86,10 @@ function generateToken(config: ConnectConfig): string {
       typ: "JWT",
     },
   });
+  cachedTokenExpiry = payload.exp;
+  cachedTokenConfigKey = configKey;
+
+  return cachedToken;
 }
 
 // ─── HTTP Wrapper ───
@@ -183,7 +202,8 @@ export async function getMetadata(
 ): Promise<ConnectLocalization> {
   const resolvedLocale = countryToLocale(locale);
 
-  // Fetch app info localizations (subtitle)
+  // Fetch app info localizations (name + subtitle)
+  let name: string | null = null;
   let subtitle: string | null = null;
   let appInfoLocalizationId: string | null = null;
 
@@ -206,11 +226,12 @@ export async function getMetadata(
       const loc = locResponse.data?.[0];
       if (loc) {
         appInfoLocalizationId = loc.id;
+        name = loc.attributes?.name ?? null;
         subtitle = loc.attributes?.subtitle ?? null;
       }
     }
   } catch {
-    // Subtitle not available
+    // App info not available
   }
 
   // Fetch version localizations (keywords, description, etc.)
@@ -252,6 +273,8 @@ export async function getMetadata(
 
   return {
     locale: resolvedLocale,
+    name,
+    nameLength: name?.length ?? 0,
     subtitle,
     subtitleLength: subtitle?.length ?? 0,
     keywords,

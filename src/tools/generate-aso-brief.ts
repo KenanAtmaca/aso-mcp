@@ -18,18 +18,24 @@ export function registerGenerateAsoBrief(server: McpServer) {
     {
       appName: z
         .string()
+        .min(1)
+        .max(50)
         .describe("App name"),
       category: z
         .string()
+        .min(1)
         .describe("App Store category (e.g. 'Health & Fitness', 'Productivity')"),
       features: z
-        .array(z.string())
+        .array(z.string().min(1))
+        .min(1)
+        .max(20)
         .describe("App's main features"),
       targetAudience: z
         .string()
+        .min(1)
         .describe("Target audience description (e.g. 'women on a diet aged 25-40', 'college students')"),
       countries: z
-        .array(z.string())
+        .array(z.string().min(2).max(5))
         .default(["tr"])
         .describe("Target countries"),
       competitorAppIds: z
@@ -38,7 +44,8 @@ export function registerGenerateAsoBrief(server: McpServer) {
         .describe("Known competitor app IDs (optional)"),
     },
     async ({ appName, category, features, targetAudience, countries, competitorAppIds }) => {
-      const cacheKey = `brief:${appName}:${category}:${countries.join(",")}`;
+      const featuresHash = features.sort().join(",");
+      const cacheKey = `brief:${appName}:${category}:${featuresHash}:${targetAudience}:${countries.join(",")}`;
       const cached = getFromCache(cacheKey);
       if (cached) {
         return { content: [{ type: "text" as const, text: cached }] };

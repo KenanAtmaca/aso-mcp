@@ -17,13 +17,19 @@ export function registerSearchKeywords(server: McpServer) {
     {
       keyword: z
         .string()
+        .min(1)
+        .max(100)
         .describe("Keyword to research (e.g. 'fitness tracker', 'photo editor')"),
       country: z
         .string()
+        .min(2)
+        .max(5)
         .default("tr")
         .describe("Country code (tr, us, de, gb, fr...)"),
       num: z
         .number()
+        .min(1)
+        .max(50)
         .default(10)
         .describe("Number of competitor apps to show"),
     },

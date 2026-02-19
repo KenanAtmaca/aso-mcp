@@ -14,13 +14,17 @@ export function registerAnalyzeCompetitors(server: McpServer) {
     "analyze_competitors",
     "Fetches and compares metadata of top-ranking apps for a keyword, and performs keyword gap analysis. Used to understand the competitive landscape.",
     {
-      keyword: z.string().describe("Keyword to analyze"),
+      keyword: z.string().min(1).max(100).describe("Keyword to analyze"),
       country: z
         .string()
+        .min(2)
+        .max(5)
         .default("tr")
         .describe("Country code (tr, us, de, gb, fr...)"),
       num: z
         .number()
+        .min(1)
+        .max(50)
         .default(10)
         .describe("Number of competitor apps to analyze"),
     },

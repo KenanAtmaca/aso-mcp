@@ -10,10 +10,11 @@ import { CACHE_TTL } from "../utils/constants.js";
 export function registerConnectListLocalizations(server: McpServer) {
   server.tool(
     "connect_list_localizations",
-    "Bir uygulamanın tüm locale'lerini ve metadata durumlarını listele",
+    "List all locales and metadata completeness status for an app",
     {
       appId: z
         .string()
+        .min(1)
         .describe("App Store Connect app ID"),
     },
     async ({ appId }) => {

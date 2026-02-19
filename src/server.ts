@@ -30,6 +30,7 @@ import { registerConnectGetApp } from "./tools/connect-get-app.js";
 import { registerConnectGetMetadata } from "./tools/connect-get-metadata.js";
 import { registerConnectUpdateMetadata } from "./tools/connect-update-metadata.js";
 import { registerConnectListLocalizations } from "./tools/connect-list-localizations.js";
+import { registerConnectBatchUpdateMetadata } from "./tools/connect-batch-update-metadata.js";
 
 // Utility tools
 import { registerClearCache } from "./tools/clear-cache.js";
@@ -72,6 +73,7 @@ registerConnectGetApp(server);
 registerConnectGetMetadata(server);
 registerConnectUpdateMetadata(server);
 registerConnectListLocalizations(server);
+registerConnectBatchUpdateMetadata(server);
 
 // Register Utility tools
 registerClearCache(server);
@@ -81,7 +83,10 @@ const transport = new StdioServerTransport();
 await server.connect(transport);
 
 // Graceful shutdown
-process.on("SIGINT", async () => {
+const shutdown = async () => {
   await server.close();
   process.exit(0);
-});
+};
+
+process.on("SIGINT", shutdown);
+process.on("SIGTERM", shutdown);

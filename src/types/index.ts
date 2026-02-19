@@ -115,6 +115,8 @@ export interface ConnectAppInfo {
 
 export interface ConnectLocalization {
   locale: string;
+  name: string | null;
+  nameLength: number;
   subtitle: string | null;
   subtitleLength: number;
   keywords: string | null;

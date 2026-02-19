@@ -1,7 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { getAppDetails, searchApps } from "../data-sources/app-store.js";
-import { getScores } from "../data-sources/aso-scoring.js";
+import { batchGetScores } from "../data-sources/aso-scoring.js";
 import { getFromCache, setCache } from "../cache/sqlite-cache.js";
 import { CACHE_TTL } from "../utils/constants.js";
 import {
@@ -16,12 +16,16 @@ export function registerKeywordGap(server: McpServer) {
     {
       appId1: z
         .string()
+        .min(1)
         .describe("First app ID or bundle ID"),
       appId2: z
         .string()
+        .min(1)
         .describe("Second app ID or bundle ID"),
       country: z
         .string()
+        .min(2)
+        .max(5)
         .default("tr")
         .describe("Country code"),
     },
@@ -58,54 +62,32 @@ export function registerKeywordGap(server: McpServer) {
         const onlyApp2 = keywords2.filter((kw) => !set1.has(kw));
         const shared = keywords1.filter((kw) => set2.has(kw));
 
-        // Opportunity keywords: in app2 but not in app1, with high traffic
-        const opportunities: {
-          keyword: string;
-          traffic: number;
-          difficulty: number;
-          opportunityScore: number;
-          source: string;
-        }[] = [];
+        // Score all unique keywords in batch (parallel)
+        const allUniqueKws = [
+          ...onlyApp2.slice(0, 15).map((kw) => ({ kw, source: `Unique to ${app2.title}` })),
+          ...onlyApp1.slice(0, 15).map((kw) => ({ kw, source: `Unique to ${app1.title}` })),
+        ];
 
-        // Opportunities for app1 (in app2 but not in app1)
-        for (const kw of onlyApp2.slice(0, 15)) {
-          try {
-            const scores = await getScores(kw, country);
-            opportunities.push({
-              keyword: kw,
-              traffic: scores.traffic,
-              difficulty: scores.difficulty,
-              opportunityScore: calculateOpportunityScore(
-                scores.traffic,
-                scores.difficulty
-              ),
-              source: `Unique to ${app2.title}`,
-            });
-          } catch {
-            // continue
-          }
-        }
+        const batchScores = await batchGetScores(
+          allUniqueKws.map((item) => item.kw),
+          country
+        );
+        const scoreMap = new Map(batchScores.map((s) => [s.keyword, s]));
 
-        // Opportunities for app2 (in app1 but not in app2)
-        for (const kw of onlyApp1.slice(0, 15)) {
-          try {
-            const scores = await getScores(kw, country);
-            opportunities.push({
-              keyword: kw,
-              traffic: scores.traffic,
-              difficulty: scores.difficulty,
-              opportunityScore: calculateOpportunityScore(
-                scores.traffic,
-                scores.difficulty
-              ),
-              source: `Unique to ${app1.title}`,
-            });
-          } catch {
-            // continue
-          }
-        }
+        const opportunities = allUniqueKws.map((item) => {
+          const scores = scoreMap.get(item.kw) || { traffic: 0, difficulty: 0 };
+          return {
+            keyword: item.kw,
+            traffic: scores.traffic,
+            difficulty: scores.difficulty,
+            opportunityScore: calculateOpportunityScore(
+              scores.traffic,
+              scores.difficulty
+            ),
+            source: item.source,
+          };
+        });
 
-        // Sort opportunities by score
         opportunities.sort((a, b) => b.opportunityScore - a.opportunityScore);
 
         const result = {

@@ -24,13 +24,18 @@ export function registerGetAsoReport(server: McpServer) {
     {
       appId: z
         .string()
+        .min(1)
         .describe("App Store app ID or bundle ID"),
       country: z
         .string()
+        .min(2)
+        .max(5)
         .default("tr")
         .describe("Country code"),
       competitors: z
         .number()
+        .min(1)
+        .max(20)
         .default(5)
         .describe("Number of competitors to analyze"),
     },

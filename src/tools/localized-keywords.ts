@@ -1,6 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { getScores } from "../data-sources/aso-scoring.js";
+import { batchGetScores } from "../data-sources/aso-scoring.js";
 import { searchApps } from "../data-sources/app-store.js";
 import { getFromCache, setCache } from "../cache/sqlite-cache.js";
 import { CACHE_TTL } from "../utils/constants.js";
@@ -12,14 +12,20 @@ export function registerLocalizedKeywords(server: McpServer) {
     "Adapts a set of keywords to different markets. Retrieves keyword scores (traffic/difficulty) for each country and shows top-ranking apps in each market. Used for multi-country ASO strategy.",
     {
       keywords: z
-        .array(z.string())
+        .array(z.string().min(1))
+        .min(1)
+        .max(20)
         .describe("List of keywords to analyze"),
       sourceCountry: z
         .string()
+        .min(2)
+        .max(5)
         .default("tr")
         .describe("Source country code"),
       targetCountries: z
-        .array(z.string())
+        .array(z.string().min(2).max(5))
+        .min(1)
+        .max(10)
         .describe("Target country codes (e.g. ['us', 'de', 'gb', 'fr'])"),
     },
     async ({ keywords, sourceCountry, targetCountries }) => {
@@ -47,61 +53,58 @@ export function registerLocalizedKeywords(server: McpServer) {
           avgTraffic: number;
         }[] = [];
 
-        for (const country of allCountries) {
-          const kwResults: {
-            keyword: string;
-            traffic: number;
-            difficulty: number;
-            topApp: string;
-          }[] = [];
+        const limitedKeywords = keywords.slice(0, 15);
 
-          for (const keyword of keywords.slice(0, 15)) {
-            try {
-              const scores = await getScores(keyword, country);
+        // Process all countries in parallel
+        const countryResults = await Promise.all(
+          allCountries.map(async (country) => {
+            // Batch score all keywords for this country
+            const scores = await batchGetScores(limitedKeywords, country);
+            const scoreMap = new Map(scores.map((s) => [s.keyword, s]));
 
-              // Get the top app for this keyword
-              let topApp = "";
-              try {
-                const apps = await searchApps(keyword, country, 1);
-                topApp = (apps[0] as any)?.title || "";
-              } catch {
-                // continue
-              }
+            // Get top apps for each keyword (parallel within country)
+            const topAppResults = await Promise.all(
+              limitedKeywords.map(async (keyword) => {
+                try {
+                  const apps = await searchApps(keyword, country, 1);
+                  return { keyword, topApp: (apps[0] as any)?.title || "" };
+                } catch {
+                  return { keyword, topApp: "" };
+                }
+              })
+            );
+            const topAppMap = new Map(topAppResults.map((r) => [r.keyword, r.topApp]));
 
-              kwResults.push({
+            const kwResults = limitedKeywords.map((keyword) => {
+              const s = scoreMap.get(keyword) || { traffic: 0, difficulty: 0 };
+              return {
                 keyword,
-                traffic: scores.traffic,
-                difficulty: scores.difficulty,
-                topApp,
-              });
-            } catch {
-              kwResults.push({
-                keyword,
-                traffic: 0,
-                difficulty: 0,
-                topApp: "",
-              });
-            }
-          }
+                traffic: s.traffic,
+                difficulty: s.difficulty,
+                topApp: topAppMap.get(keyword) || "",
+              };
+            });
 
-          const avgTraffic =
-            kwResults.length > 0
-              ? kwResults.reduce((s, k) => s + k.traffic, 0) / kwResults.length
-              : 0;
+            const avgTraffic =
+              kwResults.length > 0
+                ? kwResults.reduce((s, k) => s + k.traffic, 0) / kwResults.length
+                : 0;
 
-          const best = [...kwResults].sort(
-            (a, b) =>
-              b.traffic - a.traffic || a.difficulty - b.difficulty
-          )[0];
+            const best = [...kwResults].sort(
+              (a, b) => b.traffic - a.traffic || a.difficulty - b.difficulty
+            )[0];
 
-          localizations.push({
-            country,
-            countryName: getCountryName(country),
-            keywords: kwResults,
-            bestKeyword: best?.keyword || null,
-            avgTraffic: Math.round(avgTraffic * 10) / 10,
-          });
-        }
+            return {
+              country,
+              countryName: getCountryName(country),
+              keywords: kwResults,
+              bestKeyword: best?.keyword || null,
+              avgTraffic: Math.round(avgTraffic * 10) / 10,
+            };
+          })
+        );
+
+        localizations.push(...countryResults);
 
         // Sort countries by average traffic
         localizations.sort((a, b) => b.avgTraffic - a.avgTraffic);

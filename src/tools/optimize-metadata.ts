@@ -13,12 +13,17 @@ export function registerOptimizeMetadata(server: McpServer) {
     {
       appId: z
         .string()
+        .min(1)
         .describe("App Store app ID or bundle ID"),
       targetKeywords: z
-        .array(z.string())
+        .array(z.string().min(1))
+        .min(1)
+        .max(30)
         .describe("List of target keywords"),
       country: z
         .string()
+        .min(2)
+        .max(5)
         .default("tr")
         .describe("Country code (tr, us, de, gb, fr...)"),
     },

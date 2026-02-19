@@ -7,6 +7,8 @@ const RL = RATE_LIMITS["aso-scores"];
 
 let asoModule: any = null;
 let asoAvailable = true;
+let asoFailedAt = 0;
+const ASO_RETRY_INTERVAL_MS = 10 * 60 * 1000; // 10 minutes
 
 async function getAsoModule(): Promise<any> {
   if (!asoModule) {
@@ -64,9 +66,13 @@ export async function getScores(
   keyword: string,
   country: string = "tr"
 ): Promise<{ traffic: number; difficulty: number }> {
-  // If the aso package has previously failed, use fallback directly
+  // If the aso package has previously failed, check if enough time passed to retry
   if (!asoAvailable) {
-    return fallbackScores(keyword, country);
+    if (Date.now() - asoFailedAt < ASO_RETRY_INTERVAL_MS) {
+      return fallbackScores(keyword, country);
+    }
+    // Retry: enough time has passed
+    asoAvailable = true;
   }
 
   return withRateLimit("aso-scores", RL, async () => {
@@ -78,8 +84,9 @@ export async function getScores(
         difficulty: result.difficulty ?? 0,
       };
     } catch {
-      // aso package not working, switch to fallback
+      // aso package not working, switch to fallback with timestamp
       asoAvailable = false;
+      asoFailedAt = Date.now();
       return fallbackScores(keyword, country);
     }
   });
@@ -91,9 +98,12 @@ export async function suggestKeywords(
   country: string = "tr",
   num: number = 20
 ): Promise<string[]> {
-  // If aso package unavailable, use App Store suggest + search based fallback
+  // If aso package unavailable, check if enough time passed to retry
   if (!asoAvailable) {
-    return fallbackSuggest(appId, strategy, country, num);
+    if (Date.now() - asoFailedAt < ASO_RETRY_INTERVAL_MS) {
+      return fallbackSuggest(appId, strategy, country, num);
+    }
+    asoAvailable = true;
   }
 
   return withRateLimit("aso-scores", RL, async () => {
@@ -113,6 +123,7 @@ export async function suggestKeywords(
       });
     } catch {
       asoAvailable = false;
+      asoFailedAt = Date.now();
       return fallbackSuggest(appId, strategy, country, num);
     }
   });

@@ -9,16 +9,19 @@ import {
 export function registerConnectSetup(server: McpServer) {
   server.tool(
     "connect_setup",
-    "App Store Connect kimlik bilgilerini yapılandır ve doğrula",
+    "Configure and validate App Store Connect credentials",
     {
       issuerId: z
         .string()
+        .min(1)
         .describe("App Store Connect Issuer ID"),
       apiKeyId: z
         .string()
+        .min(1)
         .describe("App Store Connect API Key ID"),
       privateKeyPath: z
         .string()
+        .min(1)
         .describe("Path to .p8 private key file"),
     },
     async ({ issuerId, apiKeyId, privateKeyPath }) => {
