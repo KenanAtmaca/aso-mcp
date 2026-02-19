@@ -1,6 +1,6 @@
 {
   "name": "aso-mcp",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "App Store Optimization MCP Server for AI Assistants",
   "type": "module",
   "bin": {
