@@ -6,6 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 - **npm:** https://www.npmjs.com/package/aso-mcp
 - **GitHub:** https://github.com/KenanAtmaca/aso-mcp
+- **Version:** 1.1.0
 - **Install:** `npm install -g aso-mcp` or `npx aso-mcp`
 
 ## Build & Run Commands
@@ -157,7 +158,11 @@ All tools enforce input constraints via Zod:
 - `@modelcontextprotocol/sdk` pinned to **^1.26.0** (not `latest`)
 - `app-store-scraper` latest version is **0.18.0** (not 0.19.0)
 - `aso` latest version is **1.1.1** (not 2.2.0)
-- `jsonwebtoken` version **^9.0.2** — used for App Store Connect JWT ES256 auth
+- `jsonwebtoken` version **^9.0.3** — used for App Store Connect JWT ES256 auth
+- `zod` version **^4.3.6** — schema validation for all tool inputs
+- `better-sqlite3` version **^12.6.2** — SQLite cache with WAL mode
+- `dotenv` version **^16.4.0** — environment variable loading
+- Node.js **>= 22.0.0** required (engine constraint in package.json)
 - Dev mode uses `tsx` (not `node --experimental-strip-types`) due to Node 24 ESM `.js` extension conflicts
 - Import paths use `.js` extensions (TypeScript Node16 module resolution requirement)
 - External modules `app-store-scraper` and `aso` are CommonJS — declared in `src/types/externals.d.ts`
