@@ -8,6 +8,7 @@ import {
   extractTitleKeywords,
   calculateOpportunityScore,
 } from "../data-sources/custom-scoring.js";
+import { classifyOpportunity, OPPORTUNITY_TIERS } from "../utils/formatters.js";
 
 export function registerDiscoverKeywords(server: McpServer) {
   server.tool(
@@ -41,7 +42,8 @@ export function registerDiscoverKeywords(server: McpServer) {
         .describe("Maximum number of keywords"),
     },
     async ({ category, niche, features, country, maxResults }) => {
-      const cacheKey = `discover:${category}:${niche}:${features.join(",")}:${country}`;
+      const featuresHash = [...features].sort().join(",");
+      const cacheKey = `discover:${category}:${niche}:${featuresHash}:${country}:${maxResults}`;
       const cached = getFromCache(cacheKey);
       if (cached) {
         return { content: [{ type: "text" as const, text: cached }] };
@@ -77,10 +79,46 @@ export function registerDiscoverKeywords(server: McpServer) {
           }
         }
 
-        // ─── 3. Extract keywords from top apps' title + description ───
+        // ─── 3. Build brand stop list from top apps ───
+        // Competitor brand names (Spotify, Instagram, Adobe, etc.) leak into the
+        // keyword pool through title-prefix extraction. Including them in our
+        // suggestions for a NEW app is a trademark risk and irrelevant to the
+        // user's actual ASO. Build a per-search brand list and filter it out.
+        const COMPANY_SUFFIXES = new Set([
+          "inc", "inc.", "llc", "ltd", "ltd.", "corp", "corp.",
+          "co", "co.", "gmbh", "group", "studio", "studios", "labs",
+        ]);
+        const brandStopList = new Set<string>();
+        for (const [, app] of allApps) {
+          const a = app as any;
+          // Title prefix before the first separator is usually the brand
+          const titlePrefix = (a.title || "")
+            .split(/[-:|·\u2014\u2013]/)[0]
+            .trim()
+            .toLowerCase();
+          if (
+            titlePrefix &&
+            !titlePrefix.includes(" ") &&
+            titlePrefix.length > 2
+          ) {
+            brandStopList.add(titlePrefix);
+          }
+          // Single-word developer names (likely brand)
+          const devTokens = (a.developer || "")
+            .toLowerCase()
+            .split(/\s+/)
+            .filter(
+              (t: string) => t.length > 2 && !COMPANY_SUFFIXES.has(t)
+            );
+          if (devTokens.length === 1) {
+            brandStopList.add(devTokens[0]);
+          }
+        }
+
+        // ─── 4. Extract keywords from top apps' title + description ───
         const rawKeywords = new Map<string, { count: number; sources: string[] }>();
 
-        for (const [key, app] of allApps) {
+        for (const [, app] of allApps) {
           const titleKws = extractTitleKeywords(app.title || "");
           const descKws = extractTitleKeywords(
             (app.description || "").slice(0, 300)
@@ -89,6 +127,7 @@ export function registerDiscoverKeywords(server: McpServer) {
 
           for (const kw of allKws) {
             if (kw.length < 2) continue;
+            if (brandStopList.has(kw)) continue;
             const existing = rawKeywords.get(kw);
             if (existing) {
               existing.count++;
@@ -101,7 +140,7 @@ export function registerDiscoverKeywords(server: McpServer) {
           }
         }
 
-        // ─── 4. App Store autocomplete suggestions ───
+        // ─── 5. App Store autocomplete suggestions ───
         for (const term of uniqueTerms.slice(0, 5)) {
           try {
             const suggestions = await getSuggestions(term);
@@ -121,7 +160,7 @@ export function registerDiscoverKeywords(server: McpServer) {
           }
         }
 
-        // ─── 5. Add feature keywords ───
+        // ─── 6. Add feature keywords ───
         for (const feature of features) {
           const featureWords = extractTitleKeywords(feature);
           for (const fw of featureWords) {
@@ -136,7 +175,7 @@ export function registerDiscoverKeywords(server: McpServer) {
           }
         }
 
-        // ─── 6. Sort by frequency, score top keywords (in parallel) ───
+        // ─── 7. Sort by frequency, score top keywords (in parallel) ───
         const sortedKeywords = [...rawKeywords.entries()]
           .sort((a, b) => b[1].count - a[1].count)
           .slice(0, maxResults);
@@ -165,11 +204,7 @@ export function registerDiscoverKeywords(server: McpServer) {
             scores.difficulty
           );
 
-          let tier: string;
-          if (oppScore >= 7) tier = "A — High opportunity";
-          else if (oppScore >= 5) tier = "B — Medium opportunity";
-          else if (oppScore >= 3) tier = "C — Low opportunity";
-          else tier = "D — Weak";
+          const { label: tier } = classifyOpportunity(oppScore);
 
           scoredKeywords.push({
             keyword: kw,
@@ -185,7 +220,7 @@ export function registerDiscoverKeywords(server: McpServer) {
         // Sort by opportunity
         scoredKeywords.sort((a, b) => b.opportunityScore - a.opportunityScore);
 
-        // ─── 7. Summary statistics ───
+        // ─── 8. Summary statistics ───
         const tierA = scoredKeywords.filter((k) => k.tier.startsWith("A"));
         const tierB = scoredKeywords.filter((k) => k.tier.startsWith("B"));
 

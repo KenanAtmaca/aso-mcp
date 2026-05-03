@@ -10,7 +10,7 @@ const POSITIVE_WORDS = new Set([
   "harika", "mükemmel", "süper", "güzel", "kolay", "hızlı", "sevdim",
   "başarılı", "kaliteli", "tavsiye", "ederim", "ideal", "faydalı",
   "kullanışlı", "pratik", "efektif", "beğendim",
-  // Turkish (without diacritics — users often type without them)
+  // Turkish (without diacritics, users often type without them)
   "mukemmel", "super", "guzel", "hizli", "basarili", "faydali",
   "kullanisli", "begendim",
   // English
@@ -42,20 +42,31 @@ const FEATURE_INDICATORS = [
   "feature request", "missing",
 ];
 
-function analyzeSentiment(text: string): "positive" | "negative" | "neutral" {
+function analyzeSentiment(
+  text: string,
+  rating?: number
+): "positive" | "negative" | "neutral" {
   const lower = text.toLowerCase();
   const words = lower.split(/\s+/);
 
-  let positiveCount = 0;
-  let negativeCount = 0;
+  let positiveScore = 0;
+  let negativeScore = 0;
 
   for (const word of words) {
-    if (POSITIVE_WORDS.has(word)) positiveCount++;
-    if (NEGATIVE_WORDS.has(word)) negativeCount++;
+    if (POSITIVE_WORDS.has(word)) positiveScore++;
+    if (NEGATIVE_WORDS.has(word)) negativeScore++;
   }
 
-  if (positiveCount > negativeCount) return "positive";
-  if (negativeCount > positiveCount) return "negative";
+  // Rating signal: weight equivalent to two strong sentiment words.
+  // Ratings are the strongest user-supplied signal; sarcasm and mixed text
+  // can trick keyword counts (e.g. 1-star "harika çalışıyor!" should be negative).
+  if (rating !== undefined && rating >= 1 && rating <= 5) {
+    if (rating <= 2) negativeScore += 2;
+    else if (rating >= 4) positiveScore += 2;
+  }
+
+  if (positiveScore > negativeScore) return "positive";
+  if (negativeScore > positiveScore) return "negative";
   return "neutral";
 }
 
@@ -148,7 +159,8 @@ export function registerAnalyzeReviews(server: McpServer) {
           const text = review.text || review.body || "";
           const title = review.title || "";
           const fullText = `${title} ${text}`;
-          const sentiment = analyzeSentiment(fullText);
+          const reviewRating = review.score ?? review.rating;
+          const sentiment = analyzeSentiment(fullText, reviewRating);
 
           if (sentiment === "positive") positive++;
           else if (sentiment === "negative") negative++;

@@ -3,6 +3,9 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import dotenv from "dotenv";
+import { readFileSync } from "fs";
+import { fileURLToPath } from "url";
+import { dirname, join } from "path";
 
 // Phase 1 tools
 import { registerSearchKeywords } from "./tools/search-keywords.js";
@@ -39,9 +42,14 @@ import { initCache } from "./cache/sqlite-cache.js";
 
 dotenv.config();
 
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const pkg = JSON.parse(
+  readFileSync(join(__dirname, "..", "package.json"), "utf-8")
+);
+
 const server = new McpServer({
   name: "aso-mcp",
-  version: "1.0.0",
+  version: pkg.version,
 });
 
 // Initialize cache

@@ -19,7 +19,7 @@ export function registerConnectUpdateMetadata(server: McpServer) {
       locale: z
         .string()
         .default("tr")
-        .describe("Locale code — accepts both Apple format ('en-US') and country code ('us')"),
+        .describe("Locale code. Accepts both Apple format ('en-US') and country code ('us')."),
       name: z
         .string()
         .optional()

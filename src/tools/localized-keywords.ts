@@ -33,7 +33,9 @@ export function registerLocalizedKeywords(server: McpServer) {
         sourceCountry,
         ...targetCountries.filter((c) => c !== sourceCountry),
       ];
-      const cacheKey = `localized:${keywords.join(",")}:${allCountries.join(",")}`;
+      const keywordsHash = [...keywords].sort().join(",");
+      const countriesHash = [...allCountries].sort().join(",");
+      const cacheKey = `localized:${keywordsHash}:${countriesHash}`;
       const cached = getFromCache(cacheKey);
       if (cached) {
         return { content: [{ type: "text" as const, text: cached }] };

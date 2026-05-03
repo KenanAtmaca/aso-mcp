@@ -106,24 +106,95 @@ export function calculateOverallScore(params: {
 }
 
 /**
+ * Canonicalize a keyword to its singular/root form so plural variants do
+ * not double-count in keyword pools. App Store search treats these the same:
+ * indexing "trackers" already covers "tracker" and vice versa, so suggesting
+ * both wastes one of the precious 100 keyword-field characters.
+ *
+ * Conservative rules only (false positives like "us" → "u" must be avoided):
+ *   English: -ies → -y, -ches/-shes/-xes/-ses → strip -es, plain -s with safe stem
+ *   Turkish: -lar / -ler suffix removal
+ */
+export function canonicalKeyword(kw: string): string {
+  let k = kw.toLowerCase().trim();
+  if (k.length <= 3) return k;
+
+  // English: -ies → -y (categories → category)
+  if (k.length > 4 && k.endsWith("ies")) {
+    return k.slice(0, -3) + "y";
+  }
+  // English: -ches / -shes / -xes / -ses → strip -es (boxes → box)
+  if (
+    k.length > 4 &&
+    (k.endsWith("ches") || k.endsWith("shes") || k.endsWith("xes") || k.endsWith("sses"))
+  ) {
+    return k.slice(0, -2);
+  }
+  // English: plain -s → strip (trackers → tracker), avoiding -ss/-us/-is.
+  // Require length > 4 so 4-char words (kurs, koss, cats) aren't aggressively
+  // stripped. Short stems are more often real words than plurals.
+  if (
+    k.length > 4 &&
+    k.endsWith("s") &&
+    !k.endsWith("ss") &&
+    !k.endsWith("us") &&
+    !k.endsWith("is")
+  ) {
+    return k.slice(0, -1);
+  }
+  // Turkish: -lar / -ler plural suffix (kurslar → kurs)
+  if (k.length > 4 && (k.endsWith("lar") || k.endsWith("ler"))) {
+    return k.slice(0, -3);
+  }
+  return k;
+}
+
+/**
+ * Deduplicate keywords by their canonical form, preserving the first
+ * occurrence's original surface (so "Tracker" wins over "trackers" if it
+ * appeared first in the input order).
+ */
+export function dedupeKeywords(keywords: string[]): string[] {
+  const seen = new Map<string, string>();
+  for (const kw of keywords) {
+    const canon = canonicalKeyword(kw);
+    if (canon && !seen.has(canon)) {
+      seen.set(canon, kw);
+    }
+  }
+  return [...seen.values()];
+}
+
+/**
  * Extracts keywords from an app's title.
- * Filters out stop words.
+ * Filters out stop words and dedupes plural variants.
  */
 export function extractTitleKeywords(title: string): string[] {
   const stopWords = new Set([
+    // English grammar
     "the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for",
     "of", "with", "by", "from", "is", "it", "this", "that", "are", "was",
-    "be", "has", "had", "not", "no", "do", "does", "did",
-    // Turkish stop words
-    "ve", "ile", "bir", "bu", "da", "de", "mi", "mu", "için", "gibi",
-    "olan", "olarak", "den", "dan", "ya", "en",
-    // App Store common
-    "-", "&", "|", ":", "/",
+    "be", "has", "had", "not", "no", "do", "does", "did", "you", "your",
+    "my", "our", "we", "i",
+    // Turkish grammar
+    "ve", "ile", "bir", "bu", "da", "de", "mi", "mu", "için", "icin",
+    "gibi", "olan", "olarak", "den", "dan", "ya", "en", "çok", "cok",
+    "var", "yok", "daha", "ama",
+    // App Store generic noise (appears in nearly every app title)
+    "app", "apps", "uygulama", "pro", "lite", "free", "ücretsiz", "ucretsiz",
+    "premium", "plus", "mini", "max", "best", "top", "new", "now",
+    "official", "ultimate",
   ]);
 
-  return title
+  // Unicode-aware split: anything that isn't a letter or number is a separator.
+  // This handles Turkish (ç, ğ, ı, ö, ş, ü), CJK characters, and the long tail
+  // of App Store title symbols (·, ™, ®, ★, +, parentheses, em/en dashes, etc.)
+  // that the previous explicit-character splitter missed.
+  const tokens = title
     .toLowerCase()
-    .split(/[\s\-&|:\/,\.]+/)
+    .split(/[^\p{L}\p{N}]+/u)
     .map((w) => w.trim())
     .filter((w) => w.length > 1 && !stopWords.has(w));
+
+  return dedupeKeywords(tokens);
 }

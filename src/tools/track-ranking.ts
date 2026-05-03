@@ -40,22 +40,23 @@ export function registerTrackRanking(server: McpServer) {
           totalResults: number;
         }[] = [];
 
-        const normalizedAppId = appId.toLowerCase();
+        const normalizedBundleId = appId.toLowerCase();
+        const numericAppId = /^\d+$/.test(appId) ? appId : null;
 
         for (const keyword of keywords.slice(0, 20)) {
           try {
             const results = await searchApps(keyword, country, 100);
 
-            // Find the app's position
+            // Find the app's position (match by bundle ID or numeric track ID)
             let position: number | null = null;
             for (let i = 0; i < results.length; i++) {
               const result = results[i] as any;
-              const resultAppId = (result.appId || "").toLowerCase();
+              const resultBundleId = (result.appId || "").toLowerCase();
               const resultId = String(result.id || "");
-              if (
-                resultAppId === normalizedAppId ||
-                resultId === appId
-              ) {
+              const bundleMatch =
+                !!resultBundleId && resultBundleId === normalizedBundleId;
+              const idMatch = !!numericAppId && resultId === numericAppId;
+              if (bundleMatch || idMatch) {
                 position = i + 1;
                 break;
               }

@@ -59,11 +59,21 @@ const LOCALE_TO_COUNTRY: Record<string, string> = Object.fromEntries(
 );
 
 export function countryToLocale(code: string): string {
-  // If it already looks like an Apple locale (contains dash or is longer than 2 chars), return as-is
+  // If it already looks like an Apple locale (contains a dash or is longer
+  // than 2 chars), return as-is. The caller is presumed to know what they want.
   if (code.includes("-") || code.length > 2) {
     return code;
   }
-  return COUNTRY_TO_LOCALE[code.toLowerCase()] ?? code;
+  const mapped = COUNTRY_TO_LOCALE[code.toLowerCase()];
+  if (mapped) return mapped;
+
+  // Fail loud: silently passing through unknown 2-char codes leads to opaque
+  // App Store Connect 4xx errors. Tell the caller exactly what happened and
+  // what valid options look like.
+  throw new Error(
+    `Unknown country code "${code}". Use an Apple locale (e.g. "en-US", "tr", "ja") ` +
+      `or a supported country code: ${Object.keys(COUNTRY_TO_LOCALE).sort().join(", ")}`
+  );
 }
 
 export function localeToCountry(locale: string): string {

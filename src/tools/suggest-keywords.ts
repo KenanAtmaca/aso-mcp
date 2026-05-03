@@ -3,6 +3,8 @@ import { z } from "zod";
 import { suggestKeywords, batchGetScores } from "../data-sources/aso-scoring.js";
 import { getFromCache, setCache } from "../cache/sqlite-cache.js";
 import { CACHE_TTL } from "../utils/constants.js";
+import { calculateOpportunityScore } from "../data-sources/custom-scoring.js";
+import { isHighOpportunity } from "../utils/formatters.js";
 
 export function registerSuggestKeywords(server: McpServer) {
   server.tool(
@@ -80,7 +82,11 @@ export function registerSuggestKeywords(server: McpServer) {
           scoredKeywords,
           totalUniqueKeywords: uniqueKeywords.length,
           topOpportunities: scoredKeywords
-            .filter((k) => k.traffic > 4 && k.difficulty < 6)
+            .filter((k) =>
+              isHighOpportunity(
+                calculateOpportunityScore(k.traffic, k.difficulty)
+              )
+            )
             .slice(0, 10),
         };
 

@@ -57,7 +57,7 @@ export function registerGetAsoReport(server: McpServer) {
           country
         );
 
-        // 3. Search by app name — competitors
+        // 3. Search by app name (competitors)
         let competitorApps: any[] = [];
         try {
           competitorApps = await searchApps(

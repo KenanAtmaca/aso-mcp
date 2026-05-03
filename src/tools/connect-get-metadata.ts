@@ -16,7 +16,7 @@ export function registerConnectGetMetadata(server: McpServer) {
       locale: z
         .string()
         .default("tr")
-        .describe("Locale code — accepts both Apple format ('en-US') and country code ('us')"),
+        .describe("Locale code. Accepts both Apple format ('en-US') and country code ('us')."),
     },
     async ({ appId, locale }) => {
       const cacheKey = `connect-metadata:${appId}:${locale}`;

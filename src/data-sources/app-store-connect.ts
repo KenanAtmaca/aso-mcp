@@ -121,7 +121,7 @@ async function apiRequest(
       try {
         const parsed = JSON.parse(errorBody);
         if (parsed.errors?.[0]?.detail) {
-          errorMsg += ` — ${parsed.errors[0].detail}`;
+          errorMsg += `: ${parsed.errors[0].detail}`;
         }
       } catch {
         // ignore parse error
@@ -146,7 +146,7 @@ export async function validateCredentials(
     );
   }
 
-  // Test API call — list apps (limit 1)
+  // Test API call: list apps (limit 1)
   await apiRequest(config, "/v1/apps?limit=1");
   return true;
 }
@@ -182,7 +182,7 @@ export async function getApp(
       versionState = version.attributes?.appStoreState ?? null;
     }
   } catch {
-    // No editable version — not a fatal error
+    // No editable version. Not a fatal error.
   }
 
   return {
@@ -206,6 +206,7 @@ export async function getMetadata(
   let name: string | null = null;
   let subtitle: string | null = null;
   let appInfoLocalizationId: string | null = null;
+  let resolvedAppInfoId: string | null = null;
 
   try {
     const appInfosResponse = await apiRequest(
@@ -216,12 +217,12 @@ export async function getMetadata(
     const editableInfo = allInfos.find(
       (info: any) => info.attributes?.appStoreState !== "READY_FOR_SALE"
     );
-    const appInfoId = editableInfo?.id ?? allInfos[0]?.id;
+    resolvedAppInfoId = editableInfo?.id ?? allInfos[0]?.id ?? null;
 
-    if (appInfoId) {
+    if (resolvedAppInfoId) {
       const locResponse = await apiRequest(
         config,
-        `/v1/appInfos/${appInfoId}/appInfoLocalizations?filter[locale]=${resolvedLocale}`
+        `/v1/appInfos/${resolvedAppInfoId}/appInfoLocalizations?filter[locale]=${resolvedLocale}`
       );
       const loc = locResponse.data?.[0];
       if (loc) {
@@ -242,19 +243,19 @@ export async function getMetadata(
   let supportUrl: string | null = null;
   let marketingUrl: string | null = null;
   let versionLocalizationId: string | null = null;
+  let resolvedVersionId: string | null = null;
 
   try {
-    // Get the editable version
     const versionsResponse = await apiRequest(
       config,
       `/v1/apps/${appId}/appStoreVersions?filter[appStoreState]=PREPARE_FOR_SUBMISSION&limit=1`
     );
-    const versionId = versionsResponse.data?.[0]?.id;
+    resolvedVersionId = versionsResponse.data?.[0]?.id ?? null;
 
-    if (versionId) {
+    if (resolvedVersionId) {
       const verLocResponse = await apiRequest(
         config,
-        `/v1/appStoreVersions/${versionId}/appStoreVersionLocalizations?filter[locale]=${resolvedLocale}`
+        `/v1/appStoreVersions/${resolvedVersionId}/appStoreVersionLocalizations?filter[locale]=${resolvedLocale}`
       );
       const verLoc = verLocResponse.data?.[0];
       if (verLoc) {
@@ -289,6 +290,8 @@ export async function getMetadata(
     marketingUrl,
     appInfoLocalizationId,
     versionLocalizationId,
+    appInfoId: resolvedAppInfoId,
+    versionId: resolvedVersionId,
   };
 }
 
@@ -448,8 +451,10 @@ export async function updateMetadata(
         }
       );
     } else {
-      // CREATE new app info localization — 'name' is required by the API
-      const appInfoId = await getAppInfoId(config, appId);
+      // CREATE new app info localization. 'name' is required by the API.
+      // Reuse the appInfoId getMetadata already resolved (saves one API call
+      // per locale, multiplied across batch updates).
+      const appInfoId = before.appInfoId ?? (await getAppInfoId(config, appId));
       if (!appInfoId) {
         throw new Error(
           `Could not find appInfo for app "${appId}". Cannot create localization.`
@@ -492,8 +497,9 @@ export async function updateMetadata(
         }
       );
     } else {
-      // CREATE new version localization
-      const versionId = await getEditableVersionId(config, appId);
+      // CREATE new version localization. Reuse versionId from getMetadata.
+      const versionId =
+        before.versionId ?? (await getEditableVersionId(config, appId));
       if (!versionId) {
         throw new Error(
           `No PREPARE_FOR_SUBMISSION version found for app "${appId}". ` +

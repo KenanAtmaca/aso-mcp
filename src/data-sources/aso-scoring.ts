@@ -1,7 +1,10 @@
 import { withRateLimit } from "../utils/rate-limiter.js";
 import { RATE_LIMITS } from "../utils/constants.js";
-import { searchApps, getSuggestions } from "./app-store.js";
-import { calculateCompetitiveScore } from "./custom-scoring.js";
+import { searchApps, getSuggestions, getAppDetails } from "./app-store.js";
+import {
+  calculateCompetitiveScore,
+  extractTitleKeywords,
+} from "./custom-scoring.js";
 
 const RL = RATE_LIMITS["aso-scores"];
 
@@ -25,8 +28,12 @@ async function getClient(country: string = "tr"): Promise<any> {
 
 /**
  * If the aso package returns 503, calculate our own scores from search results.
- * Traffic: estimated from search result count + average review count
- * Difficulty: calculated from rating/review strength of top-ranking apps
+ * Traffic uses three independent signals so a single noisy data point
+ * (e.g. one blockbuster app) cannot dominate the estimate:
+ *   1) Result count: how many apps Apple returns for the term (popular = many)
+ *   2) Top result strength: blockbuster apps cluster around high-traffic terms
+ *   3) Average review depth: many established apps signals broad interest
+ * Difficulty is calculated from rating/review strength of top-ranking apps.
  */
 async function fallbackScores(
   keyword: string,
@@ -38,16 +45,25 @@ async function fallbackScores(
     return { traffic: 1, difficulty: 1 };
   }
 
-  // Traffic estimate: based on result quality
+  const top1Reviews = (results[0] as any)?.reviews || 0;
   const avgReviews =
     results.reduce((s: number, a: any) => s + (a.reviews || 0), 0) /
     results.length;
+
+  // Signal 1: result count (0-3). Apple caps responses around 20+ for popular terms.
+  const resultCountSignal = Math.min(3, results.length / 6.67);
+
+  // Signal 2: top result review depth (0-4). 1M+ review apps mark high-traffic terms.
+  const top1Signal = Math.min(4, Math.log10(Math.max(1, top1Reviews)) / 1.5);
+
+  // Signal 3: average review depth across results (0-3).
+  const avgSignal = Math.min(3, Math.log10(Math.max(1, avgReviews)) / 1.8);
+
   const traffic = Math.min(
     10,
-    Math.max(1, Math.log10(Math.max(1, avgReviews)) * 1.8)
+    Math.max(1, resultCountSignal + top1Signal + avgSignal)
   );
 
-  // Difficulty: competitive score
   const difficulty = calculateCompetitiveScore(
     results.slice(0, 10).map((a: any) => ({
       rating: a.score || 0,
@@ -75,21 +91,22 @@ export async function getScores(
     asoAvailable = true;
   }
 
-  return withRateLimit("aso-scores", RL, async () => {
-    try {
+  // Let withRateLimit's exponential backoff retry handle transient 503/429
+  // before we give up and switch to fallback for the full retry interval.
+  try {
+    return await withRateLimit("aso-scores", RL, async () => {
       const client = await getClient(country);
       const result = await client.scores(keyword);
       return {
         traffic: result.traffic ?? 0,
         difficulty: result.difficulty ?? 0,
       };
-    } catch {
-      // aso package not working, switch to fallback with timestamp
-      asoAvailable = false;
-      asoFailedAt = Date.now();
-      return fallbackScores(keyword, country);
-    }
-  });
+    });
+  } catch {
+    asoAvailable = false;
+    asoFailedAt = Date.now();
+    return fallbackScores(keyword, country);
+  }
 }
 
 export async function suggestKeywords(
@@ -106,8 +123,8 @@ export async function suggestKeywords(
     asoAvailable = true;
   }
 
-  return withRateLimit("aso-scores", RL, async () => {
-    try {
+  try {
+    return await withRateLimit("aso-scores", RL, async () => {
       const client = await getClient(country);
 
       const strategyMap: Record<string, any> = {
@@ -121,12 +138,12 @@ export async function suggestKeywords(
         appId,
         num,
       });
-    } catch {
-      asoAvailable = false;
-      asoFailedAt = Date.now();
-      return fallbackSuggest(appId, strategy, country, num);
-    }
-  });
+    });
+  } catch {
+    asoAvailable = false;
+    asoFailedAt = Date.now();
+    return fallbackSuggest(appId, strategy, country, num);
+  }
 }
 
 /**
@@ -160,7 +177,9 @@ export async function batchGetScores(
 
 /**
  * When the aso package is unavailable, generate keyword suggestions via app-store-scraper.
- * Sends keywords from the app's title + description to App Store suggest.
+ * Fetches the app's actual title and seeds App Store autocomplete with each
+ * meaningful title keyword. Bundle IDs ('com.spotify.client') alone are
+ * useless to autocomplete, so we always resolve the app first.
  */
 async function fallbackSuggest(
   appId: string,
@@ -169,17 +188,27 @@ async function fallbackSuggest(
   num: number
 ): Promise<string[]> {
   try {
-    // App Store autocomplete suggestions
-    const suggestions = await getSuggestions(appId);
-    if (suggestions.length >= num) {
-      return suggestions.slice(0, num);
+    // Resolve the app to get its real title (works for both bundle ID and numeric ID)
+    const app = await getAppDetails(appId, country);
+    const titleKeywords = extractTitleKeywords(app.title || "");
+
+    if (titleKeywords.length === 0) {
+      return [];
     }
 
-    // Additionally pull suggestions from simple keywords
-    const extraTerms = appId.split(/[.\-_]/).filter((t) => t.length > 2);
-    const allSuggestions = new Set(suggestions);
+    const allSuggestions = new Set<string>();
 
-    for (const term of extraTerms.slice(0, 3)) {
+    // Seed autocomplete with the full title (catches multi-word brand suggestions)
+    try {
+      const titleSuggestions = await getSuggestions(app.title);
+      titleSuggestions.forEach((s: string) => allSuggestions.add(s));
+    } catch {
+      // continue
+    }
+
+    // Then seed with each meaningful title keyword
+    for (const term of titleKeywords.slice(0, 3)) {
+      if (allSuggestions.size >= num) break;
       try {
         const more = await getSuggestions(term);
         more.forEach((s: string) => allSuggestions.add(s));

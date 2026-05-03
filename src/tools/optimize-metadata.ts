@@ -134,22 +134,22 @@ export function registerOptimizeMetadata(server: McpServer) {
         const warnings: string[] = [];
         if (suggestedTitle.length > CHAR_LIMITS.TITLE) {
           warnings.push(
-            `Title is ${suggestedTitle.length} chars — limit is ${CHAR_LIMITS.TITLE}`
+            `Title is ${suggestedTitle.length} chars. Limit is ${CHAR_LIMITS.TITLE}.`
           );
         }
         if (suggestedSubtitle.length > CHAR_LIMITS.SUBTITLE) {
           warnings.push(
-            `Subtitle is ${suggestedSubtitle.length} chars — limit is ${CHAR_LIMITS.SUBTITLE}`
+            `Subtitle is ${suggestedSubtitle.length} chars. Limit is ${CHAR_LIMITS.SUBTITLE}.`
           );
         }
         if (keywordField.length > CHAR_LIMITS.KEYWORD_FIELD) {
           warnings.push(
-            `Keyword field is ${keywordField.length} chars — limit is ${CHAR_LIMITS.KEYWORD_FIELD}`
+            `Keyword field is ${keywordField.length} chars. Limit is ${CHAR_LIMITS.KEYWORD_FIELD}.`
           );
         }
         if (keywordField.includes(" ")) {
           warnings.push(
-            "Do not use spaces in the keyword field — separate with commas"
+            "Do not use spaces in the keyword field. Separate with commas."
           );
         }
 

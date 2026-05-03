@@ -1,7 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { searchApps, getAppDetails, getSuggestions } from "../data-sources/app-store.js";
-import { getScores, batchGetScores } from "../data-sources/aso-scoring.js";
+import { batchGetScores } from "../data-sources/aso-scoring.js";
 import { getFromCache, setCache } from "../cache/sqlite-cache.js";
 import { CACHE_TTL, CHAR_LIMITS } from "../utils/constants.js";
 import { getCountryName } from "../utils/localization.js";
@@ -10,6 +10,55 @@ import {
   calculateCompetitiveScore,
   calculateOpportunityScore,
 } from "../data-sources/custom-scoring.js";
+import { OPPORTUNITY_TIERS } from "../utils/formatters.js";
+
+/**
+ * Greedy-pack keyword candidates into App Store's 100-char comma-separated
+ * keyword field. Splits multi-word candidates into individual tokens (each
+ * is indexed separately by Apple), excludes anything already used in
+ * title/subtitle (those slots are wasted), dedupes, and strips spaces.
+ * Returns the actual ready-to-paste string plus what was used vs left over.
+ */
+function packKeywordField(
+  candidates: string[],
+  maxLength: number,
+  excludedTokens: Set<string>
+): { packed: string; used: string[]; unused: string[]; excluded: string[] } {
+  const seen = new Set<string>();
+  const tokens: string[] = [];
+  const excluded: string[] = [];
+
+  for (const cand of candidates) {
+    const parts = cand
+      .toLowerCase()
+      .split(/[\s,]+/)
+      .map((t) => t.trim())
+      .filter((t) => t.length >= 2);
+    for (const part of parts) {
+      if (seen.has(part)) continue;
+      seen.add(part);
+      if (excludedTokens.has(part)) {
+        excluded.push(part);
+        continue;
+      }
+      tokens.push(part);
+    }
+  }
+
+  let packed = "";
+  const used: string[] = [];
+  const unused: string[] = [];
+  for (const tok of tokens) {
+    const next = packed ? `${packed},${tok}` : tok;
+    if (next.length <= maxLength) {
+      packed = next;
+      used.push(tok);
+    } else {
+      unused.push(tok);
+    }
+  }
+  return { packed, used, unused, excluded };
+}
 
 export function registerGenerateAsoBrief(server: McpServer) {
   server.tool(
@@ -44,8 +93,10 @@ export function registerGenerateAsoBrief(server: McpServer) {
         .describe("Known competitor app IDs (optional)"),
     },
     async ({ appName, category, features, targetAudience, countries, competitorAppIds }) => {
-      const featuresHash = features.sort().join(",");
-      const cacheKey = `brief:${appName}:${category}:${featuresHash}:${targetAudience}:${countries.join(",")}`;
+      const featuresHash = [...features].sort().join(",");
+      const competitorsHash = [...competitorAppIds].sort().join(",");
+      const countriesHash = [...countries].sort().join(",");
+      const cacheKey = `brief:${appName}:${category}:${featuresHash}:${targetAudience}:${countriesHash}:${competitorsHash}`;
       const cached = getFromCache(cacheKey);
       if (cached) {
         return { content: [{ type: "text" as const, text: cached }] };
@@ -244,46 +295,97 @@ export function registerGenerateAsoBrief(server: McpServer) {
           .filter((k) => !usedInTitleSubtitle.has(k.keyword))
           .map((k) => k.keyword);
 
-        // ─── 5. Multi-market analysis ───
-        const marketAnalysis: {
-          country: string;
-          countryName: string;
-          topKeywords: { keyword: string; traffic: number; difficulty: number }[];
-        }[] = [];
+        // Tokens already covered by appName + title + subtitle (appearing in
+        // those metadata fields makes including them in the keyword field
+        // wasteful since Apple already indexes them).
+        const reservedTokens = new Set<string>(
+          [appName, ...titleCandidates, ...subtitleCandidates]
+            .flatMap((s) => s.toLowerCase().split(/\s+/))
+            .filter((t) => t.length >= 2)
+        );
 
-        for (const c of countries) {
-          if (c === primaryCountry) {
-            marketAnalysis.push({
+        const keywordFieldPack = packKeywordField(
+          keywordFieldCandidates,
+          CHAR_LIMITS.KEYWORD_FIELD,
+          reservedTokens
+        );
+
+        // Build a concrete, ready-to-use suggested title that actually fits
+        // 30 chars. Greedy-pack the highest-traffic keywords after the app name.
+        const titleSeparator = " - ";
+        const titleWarnings: string[] = [];
+        let suggestedTitle = appName.trim();
+        if (suggestedTitle.length > CHAR_LIMITS.TITLE) {
+          titleWarnings.push(
+            `App name '${appName}' is ${suggestedTitle.length} chars and exceeds the ${CHAR_LIMITS.TITLE}-char title limit. Consider a shorter brand.`
+          );
+          suggestedTitle = suggestedTitle.slice(0, CHAR_LIMITS.TITLE);
+        } else {
+          const room = CHAR_LIMITS.TITLE - suggestedTitle.length - titleSeparator.length;
+          if (room > 3) {
+            let suffix = "";
+            for (const kw of titleCandidates) {
+              const lowerKw = kw.toLowerCase();
+              if (suggestedTitle.toLowerCase().includes(lowerKw)) continue;
+              if (suffix.toLowerCase().includes(lowerKw)) continue;
+              const next = suffix ? `${suffix} ${kw}` : kw;
+              if (next.length <= room) suffix = next;
+            }
+            if (suffix) suggestedTitle = `${suggestedTitle}${titleSeparator}${suffix}`;
+          }
+        }
+
+        // Same packing for subtitle, comma-separated
+        let suggestedSubtitle = "";
+        for (const kw of subtitleCandidates) {
+          const lowerKw = kw.toLowerCase();
+          if (suggestedTitle.toLowerCase().includes(lowerKw)) continue;
+          if (suggestedSubtitle.toLowerCase().includes(lowerKw)) continue;
+          const next = suggestedSubtitle ? `${suggestedSubtitle}, ${kw}` : kw;
+          if (next.length <= CHAR_LIMITS.SUBTITLE) suggestedSubtitle = next;
+        }
+
+        // ─── 5. Multi-market analysis (countries scored in parallel) ───
+        const marketAnalysis = await Promise.all(
+          countries.map(async (c) => {
+            if (c === primaryCountry) {
+              return {
+                country: c,
+                countryName: getCountryName(c),
+                topKeywords: topKeywords.slice(0, 10).map((k) => ({
+                  keyword: k.keyword,
+                  traffic: k.traffic,
+                  difficulty: k.difficulty,
+                })),
+              };
+            }
+
+            const marketTopKws = topKeywords.slice(0, 8);
+            const marketScores = await batchGetScores(
+              marketTopKws.map((k) => k.keyword),
+              c
+            );
+            const marketScoreMap = new Map(
+              marketScores.map((s) => [s.keyword, s])
+            );
+
+            return {
               country: c,
               countryName: getCountryName(c),
-              topKeywords: topKeywords.slice(0, 10).map((k) => ({
-                keyword: k.keyword,
-                traffic: k.traffic,
-                difficulty: k.difficulty,
-              })),
-            });
-            continue;
-          }
-
-          const marketKws: { keyword: string; traffic: number; difficulty: number }[] = [];
-          for (const kw of topKeywords.slice(0, 8)) {
-            try {
-              const scores = await getScores(kw.keyword, c);
-              marketKws.push({
-                keyword: kw.keyword,
-                traffic: scores.traffic,
-                difficulty: scores.difficulty,
-              });
-            } catch {
-              marketKws.push({ keyword: kw.keyword, traffic: 0, difficulty: 0 });
-            }
-          }
-          marketAnalysis.push({
-            country: c,
-            countryName: getCountryName(c),
-            topKeywords: marketKws,
-          });
-        }
+              topKeywords: marketTopKws.map((k) => {
+                const s = marketScoreMap.get(k.keyword) ?? {
+                  traffic: 0,
+                  difficulty: 0,
+                };
+                return {
+                  keyword: k.keyword,
+                  traffic: s.traffic,
+                  difficulty: s.difficulty,
+                };
+              }),
+            };
+          })
+        );
 
         // ─── 6. Build brief ───
         const result = {
@@ -309,30 +411,45 @@ export function registerGenerateAsoBrief(server: McpServer) {
 
           keywordPool: {
             total: scoredPool.length,
-            topOpportunities: scoredPool.filter((k) => k.opportunityScore >= 6).slice(0, 15),
+            topOpportunities: scoredPool
+              .filter((k) => k.opportunityScore >= OPPORTUNITY_TIERS.MEDIUM)
+              .slice(0, 15),
             allKeywords: scoredPool,
           },
 
           metadataGuidelines: {
             title: {
               maxLength: CHAR_LIMITS.TITLE,
-              recommendation: `"${appName}" + highest traffic keyword. Competitors use ${avgCompetitorTitleLength} chars on average.`,
+              recommendation: `App name + highest traffic keywords, separated by " - ". Competitors use ${avgCompetitorTitleLength} chars on average.`,
+              suggested: suggestedTitle,
+              suggestedLength: suggestedTitle.length,
+              suggestedRemaining: CHAR_LIMITS.TITLE - suggestedTitle.length,
               candidateKeywords: titleCandidates,
               pattern: `${appName} - [keyword1] [keyword2]`,
               examples: competitorData.slice(0, 3).map((c) => c.title),
+              warnings: titleWarnings.length > 0 ? titleWarnings : undefined,
             },
             subtitle: {
               maxLength: CHAR_LIMITS.SUBTITLE,
-              recommendation: "Use high traffic keywords that are not in the title.",
+              recommendation: "Comma-separated high-traffic keywords that are not in the title.",
+              suggested: suggestedSubtitle,
+              suggestedLength: suggestedSubtitle.length,
+              suggestedRemaining: CHAR_LIMITS.SUBTITLE - suggestedSubtitle.length,
               candidateKeywords: subtitleCandidates,
             },
             keywordField: {
               maxLength: CHAR_LIMITS.KEYWORD_FIELD,
-              recommendation: "Separate keywords not in title and subtitle with commas. Do not use spaces.",
+              recommendation:
+                "Separate keywords with commas, no spaces. Tokens already in title/subtitle are excluded automatically (Apple indexes them once).",
+              packed: keywordFieldPack.packed,
+              packedLength: keywordFieldPack.packed.length,
+              packedKeywords: keywordFieldPack.used,
+              droppedDueToLimit: keywordFieldPack.unused,
+              excludedDueToTitleSubtitle: keywordFieldPack.excluded,
               candidateKeywords: keywordFieldCandidates,
             },
             description: {
-              recommendation: "First 3 sentences are critical — place the most important keywords here. Apple now also uses the description for keyword analysis.",
+              recommendation: "First 3 sentences are critical. Place the most important keywords here. Apple now also uses the description for keyword analysis.",
               mustIncludeKeywords: topKeywords.slice(0, 8).map((k) => k.keyword),
             },
           },
@@ -340,12 +457,12 @@ export function registerGenerateAsoBrief(server: McpServer) {
           marketAnalysis,
 
           actionPlan: [
-            `1. Create title: "${appName}" + [${titleCandidates.slice(0, 2).join(", ")}] (max ${CHAR_LIMITS.TITLE} chars)`,
-            `2. Create subtitle: [${subtitleCandidates.slice(0, 3).join(", ")}] (max ${CHAR_LIMITS.SUBTITLE} chars)`,
-            `3. Fill keyword field: ${keywordFieldCandidates.slice(0, 5).join(",")} (max ${CHAR_LIMITS.KEYWORD_FIELD} chars, comma-separated)`,
-            `4. Write description: Use [${topKeywords.slice(0, 3).map((k) => k.keyword).join(", ")}] keywords in the first 3 sentences`,
+            `1. Title (${suggestedTitle.length}/${CHAR_LIMITS.TITLE} chars): "${suggestedTitle}"`,
+            `2. Subtitle (${suggestedSubtitle.length}/${CHAR_LIMITS.SUBTITLE} chars): "${suggestedSubtitle}"`,
+            `3. Keyword field (${keywordFieldPack.packed.length}/${CHAR_LIMITS.KEYWORD_FIELD} chars): ${keywordFieldPack.packed}`,
+            `4. Description: Place [${topKeywords.slice(0, 3).map((k) => k.keyword).join(", ")}] in the first 3 sentences`,
             `5. ${countries.length > 1 ? `Localize for ${countries.length} markets` : "Optimize for single market"}`,
-            `6. Follow competitor patterns: ${commonCompetitorKeywords.slice(0, 5).join(", ") || "unique space"}`,
+            `6. Common competitor patterns to consider: ${commonCompetitorKeywords.slice(0, 5).join(", ") || "no shared patterns (unique space)"}`,
           ],
         };
 

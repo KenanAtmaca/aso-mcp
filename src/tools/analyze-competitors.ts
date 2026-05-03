@@ -53,7 +53,7 @@ export function registerAnalyzeCompetitors(server: McpServer) {
           };
         });
 
-        // Keyword frequency analysis
+        // Keyword frequency analysis across all top-ranking apps
         const keywordFrequency: Record<string, number> = {};
         for (const app of appsWithKeywords) {
           for (const kw of app.titleKeywords) {
@@ -61,20 +61,40 @@ export function registerAnalyzeCompetitors(server: McpServer) {
           }
         }
 
-        // Common keywords (appearing in 2+ apps)
+        // Common keywords: used by 2+ apps. These define the category and are
+        // the "table stakes" any competing app should consider including.
         const commonKeywords = Object.entries(keywordFrequency)
           .filter(([, count]) => count >= 2)
           .sort((a, b) => b[1] - a[1])
           .map(([kw]) => kw);
-
-        // All unique keywords
-        const allKeywords = [...new Set(
-          appsWithKeywords.flatMap((a) => a.titleKeywords)
-        )];
-
-        // Keyword gap: keywords not in commonKeywords (opportunity)
         const commonSet = new Set(commonKeywords);
-        const keywordGap = allKeywords.filter((kw) => !commonSet.has(kw));
+
+        // Unique keywords: used by exactly one app. Signal of differentiation
+        // strategy by that app, not necessarily an opportunity for everyone.
+        const uniqueKeywords = Object.entries(keywordFrequency)
+          .filter(([, count]) => count === 1)
+          .map(([kw]) => kw);
+
+        // Per-app coverage: each app's missing common keywords. This is the
+        // true "gap" in ASO terms (which keywords does this app fail to use
+        // that its peers consistently include?).
+        const competitorCoverage = appsWithKeywords.map((app) => {
+          const myKws = new Set(app.titleKeywords);
+          const missingCommon = commonKeywords.filter((kw) => !myKws.has(kw));
+          const coveragePercent =
+            commonKeywords.length > 0
+              ? Math.round(
+                  ((commonKeywords.length - missingCommon.length) /
+                    commonKeywords.length) *
+                    100
+                )
+              : 100;
+          return {
+            app: app.title,
+            coveragePercent,
+            missingCommonKeywords: missingCommon,
+          };
+        });
 
         // Metrics
         const avgRating =
@@ -116,7 +136,8 @@ export function registerAnalyzeCompetitors(server: McpServer) {
           keywordScores,
           apps: appsWithKeywords,
           commonKeywords,
-          keywordGap,
+          uniqueKeywords,
+          competitorCoverage,
           metrics: {
             avgRating: Math.round(avgRating * 100) / 100,
             avgReviews: Math.round(avgReviews),

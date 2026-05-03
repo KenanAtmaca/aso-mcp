@@ -28,12 +28,19 @@ export interface AppDetails {
   size: string;
 }
 
+export interface CompetitorCoverage {
+  app: string;
+  coveragePercent: number;
+  missingCommonKeywords: string[];
+}
+
 export interface CompetitorAnalysis {
   keyword: string;
   country: string;
   apps: CompetitorApp[];
-  keywordGap: string[];
   commonKeywords: string[];
+  uniqueKeywords: string[];
+  competitorCoverage: CompetitorCoverage[];
   metrics: {
     avgRating: number;
     avgReviews: number;
@@ -131,6 +138,9 @@ export interface ConnectLocalization {
   marketingUrl: string | null;
   appInfoLocalizationId: string | null;
   versionLocalizationId: string | null;
+  // Parent IDs reused by updateMetadata to avoid re-fetching for create paths
+  appInfoId: string | null;
+  versionId: string | null;
 }
 
 export interface ConnectLocalizationSummary {

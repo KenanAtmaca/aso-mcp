@@ -4,8 +4,10 @@ import os from "os";
 import fs from "fs";
 
 const MAX_CACHE_ENTRIES = 5000;
+const SIZE_CHECK_INTERVAL = 100;
 
 let db: Database.Database;
+let writesSinceLastCheck = 0;
 
 export function initCache(): void {
   const dataDir = path.join(os.homedir(), ".aso-mcp");
@@ -54,12 +56,16 @@ export function setCache(
     "INSERT OR REPLACE INTO cache (key, value, expires_at) VALUES (?, ?, ?)"
   ).run(key, value, expiresAt);
 
-  // Periodic size check (every ~100 writes, check and trim)
-  const count = (
-    db.prepare("SELECT COUNT(*) as count FROM cache").get() as { count: number }
-  ).count;
-  if (count > MAX_CACHE_ENTRIES) {
-    enforceSizeLimit();
+  // Throttle: only check size every SIZE_CHECK_INTERVAL writes (avoids O(N) COUNT per write).
+  writesSinceLastCheck++;
+  if (writesSinceLastCheck >= SIZE_CHECK_INTERVAL) {
+    writesSinceLastCheck = 0;
+    const count = (
+      db.prepare("SELECT COUNT(*) as count FROM cache").get() as { count: number }
+    ).count;
+    if (count > MAX_CACHE_ENTRIES) {
+      enforceSizeLimit();
+    }
   }
 }
 

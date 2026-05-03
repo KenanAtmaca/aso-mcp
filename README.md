@@ -5,7 +5,7 @@
 [![Node.js](https://img.shields.io/badge/Node.js-22%2B-green.svg)](https://nodejs.org)
 [![MCP](https://img.shields.io/badge/MCP-Compatible-purple.svg)](https://modelcontextprotocol.io)
 
-**App Store Optimization toolkit for AI assistants.** Keyword research, competitor analysis, review sentiment, metadata optimization — all through the Model Context Protocol.
+**App Store Optimization toolkit for AI assistants.** Keyword research, competitor analysis, review sentiment, and metadata optimization. All through the Model Context Protocol.
 
 > **No API key required.** Works out of the box with real App Store data. Supports 155+ countries.
 
@@ -23,13 +23,13 @@ npm install -g aso-mcp
 
 ## Why aso-mcp?
 
-- **18 specialized ASO tools** — from keyword discovery to App Store Connect metadata management
-- **Real App Store data** — live search results, ratings, reviews, and suggestions
-- **Custom scoring engine** — proprietary algorithm independent of Apple Search Ads API issues
-- **No API key needed** — zero configuration, install and go
-- **Smart caching** — SQLite-backed cache for fast repeated queries
-- **Rate limiting** — built-in request management to avoid Apple throttling
-- **Multi-country** — analyze keywords across 155+ App Store markets
+- **19 specialized ASO tools**: from keyword discovery to App Store Connect metadata management
+- **Real App Store data**: live search results, ratings, reviews, and suggestions
+- **Custom scoring engine**: proprietary algorithm independent of Apple Search Ads API issues
+- **No API key needed**: zero configuration, install and go
+- **Smart caching**: SQLite-backed cache for fast repeated queries
+- **Rate limiting**: built-in request management to avoid Apple throttling
+- **Multi-country**: analyze keywords across 155+ App Store markets
 
 ## Integration
 
@@ -82,7 +82,7 @@ Any MCP-compatible client (ChatGPT, Cursor, Windsurf, etc.) can connect via stdi
 
 ## Tools
 
-### Phase 1 — Keyword Research
+### Phase 1: Keyword Research
 
 | Tool | Description |
 |------|-------------|
@@ -90,7 +90,7 @@ Any MCP-compatible client (ChatGPT, Cursor, Windsurf, etc.) can connect via stdi
 | `suggest_keywords` | Keyword suggestions by app ID (category, similar, competition strategies) |
 | `get_app_details` | Full ASO info for an app + metadata analysis |
 
-### Phase 2 — Competitor Analysis & Optimization
+### Phase 2: Competitor Analysis & Optimization
 
 | Tool | Description |
 |------|-------------|
@@ -100,21 +100,21 @@ Any MCP-compatible client (ChatGPT, Cursor, Windsurf, etc.) can connect via stdi
 | `track_ranking` | App's ranking position across multiple keywords |
 | `keyword_gap` | Keyword difference between two apps + opportunity analysis |
 
-### Phase 3 — Localization & Reporting
+### Phase 3: Localization & Reporting
 
 | Tool | Description |
 |------|-------------|
 | `localized_keywords` | Keyword performance comparison across different countries |
 | `get_aso_report` | Comprehensive ASO report: scores + competitors + reviews in one call |
 
-### Phase 4 — ASO Generation
+### Phase 4: ASO Generation
 
 | Tool | Description |
 |------|-------------|
 | `discover_keywords` | Keyword discovery from scratch for a new app |
 | `generate_aso_brief` | Complete ASO brief with keyword pool, competitor patterns, and metadata suggestions |
 
-### Phase 5 — App Store Connect
+### Phase 5: App Store Connect
 
 Directly read and update your app's metadata on App Store Connect without leaving the AI assistant.
 
@@ -124,6 +124,7 @@ Directly read and update your app's metadata on App Store Connect without leavin
 | `connect_get_app` | Find app by bundle ID, get ASC ID + version status |
 | `connect_get_metadata` | Read current metadata (title, subtitle, keywords, description) for a locale |
 | `connect_update_metadata` | Update metadata with character limit validation + before/after diff |
+| `connect_batch_update_metadata` | Batch update metadata for multiple locales in one call (max 40 locales) |
 | `connect_list_localizations` | List all locales and metadata completeness status |
 
 <details>
@@ -131,14 +132,14 @@ Directly read and update your app's metadata on App Store Connect without leavin
 
 Requires an [App Store Connect API Key](https://developer.apple.com/documentation/appstoreconnectapi/creating_api_keys_for_app_store_connect_api):
 
-**Option A — Environment variables:**
+**Option A: Environment variables**
 ```bash
 export ASC_ISSUER_ID="your-issuer-id"
 export ASC_KEY_ID="your-key-id"
 export ASC_PRIVATE_KEY_PATH="/path/to/AuthKey_XXXXX.p8"
 ```
 
-**Option B — Use the setup tool:**
+**Option B: Use the setup tool**
 ```
 "Set up App Store Connect with issuer ID xxx, key ID yyy, and key at /path/to/AuthKey.p8"
 ```
@@ -190,7 +191,7 @@ The server calculates its own scores, independent of Apple Search Ads API:
 | **Opportunity** | High traffic + low difficulty = high opportunity |
 | **Overall** | Weighted combination of all scores (0-10) |
 
-When the `aso` npm package fails to reach Apple (503 errors), the server automatically falls back to custom scoring using search result analysis — so scores are always available.
+When the `aso` npm package fails to reach Apple (503 errors), the server automatically falls back to custom scoring using search result analysis. Scores are always available.
 
 ## Development
 
@@ -212,11 +213,11 @@ npx tsx test-generation.ts   # ASO generation tests (8)
 ## Tech Stack
 
 - **TypeScript** + **Node.js 22+**
-- **[MCP SDK](https://modelcontextprotocol.io)** — Model Context Protocol
-- **[app-store-scraper](https://www.npmjs.com/package/app-store-scraper)** — App Store data
-- **[aso](https://www.npmjs.com/package/aso)** — ASO scoring with automatic fallback
-- **[better-sqlite3](https://www.npmjs.com/package/better-sqlite3)** — Cache layer
-- **[Zod](https://www.npmjs.com/package/zod)** — Schema validation
+- **[MCP SDK](https://modelcontextprotocol.io)**: Model Context Protocol
+- **[app-store-scraper](https://www.npmjs.com/package/app-store-scraper)**: App Store data
+- **[aso](https://www.npmjs.com/package/aso)**: ASO scoring with automatic fallback
+- **[better-sqlite3](https://www.npmjs.com/package/better-sqlite3)**: Cache layer
+- **[Zod](https://www.npmjs.com/package/zod)**: Schema validation
 
 ## License
 
