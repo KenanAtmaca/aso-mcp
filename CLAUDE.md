@@ -18,7 +18,7 @@ npm run dev          # Run server directly with tsx (development)
 npm run build        # Compile TypeScript to ./build + chmod 755
 npm run start        # Run compiled server (production)
 npm run inspect      # Open MCP Inspector in browser for interactive testing
-npx tsx test.ts              # Core test suite (17 tests: cache, scoring, scraping, integration)
+npx tsx test.ts              # Core test suite (18 tests: cache, ranking history, scoring, scraping, integration)
 npx tsx test-generation.ts   # ASO generation scenario tests (8 tests)
 npx tsx test-phase3.ts       # Localization & report tests (4 tests)
 npx tsx test-connect.ts      # App Store Connect tests (9 tests, locale mapping + optional live API)
@@ -64,13 +64,13 @@ npm publish --access public     # Publish to npm (requires auth token)
 
 ### Key Layers
 
-- **`src/tools/`**: 19 MCP tool definitions. Each follows the pattern: Zod schema validation (with min/max constraints) → cache lookup → data source calls → format result → cache + return. All return `{ content: [{ type: "text", text: JSON }] }`.
+- **`src/tools/`**: 20 MCP tool definitions. Each follows the pattern: Zod schema validation (with min/max constraints) → cache lookup → data source calls → format result → cache + return. All return `{ content: [{ type: "text", text: JSON }] }`. Exception: `get_ranking_history` reads only the local SQLite history (no API calls, no caching).
 - **`src/data-sources/`**: Four data adapters:
   - `app-store.ts`: Wraps `app-store-scraper` (search, app details, reviews, ratings, suggestions, similar apps). All calls go through rate limiter. `getSuggestions(term, country)` passes the country to Apple's autocomplete (via X-Apple-Store-Front header) and normalizes the scraper's `[{ term }]` object results to plain strings (the scraper does NOT return `string[]` despite older assumptions).
   - `aso-scoring.ts`: Wraps `aso` npm package for traffic/difficulty scores. **Falls back automatically** to custom scoring when the aso package fails after retries. The try/catch is now placed OUTSIDE `withRateLimit` so 503/429 errors trigger the rate limiter's exponential backoff (1s + 2s + 4s) before fallback kicks in. Fallback has a 10-minute retry timer (`ASO_RETRY_INTERVAL_MS`); after 10 minutes the aso package is retried automatically. `batchGetScores()` processes keywords in parallel batches of 5. `fallbackSuggest()` resolves the app's real title before seeding autocomplete (no longer passes bundle IDs literally).
   - `custom-scoring.ts`: Four scoring algorithms (visibility, competitive, opportunity, overall) independent of Apple APIs. `extractTitleKeywords()` uses a Unicode-aware splitter (`[^\p{L}\p{N}]+`) that handles Turkish characters and App Store title symbols (·, ™, ®, ★, +, parens, em/en dashes), filters expanded stop words (app/free/pro/lite/premium/best/top/new + Turkish equivalents), and dedupes plural variants via `dedupeKeywords` + `canonicalKeyword` (trackers → tracker, kurslar → kurs, categories → category).
   - `app-store-connect.ts`: App Store Connect API client. JWT ES256 auth via `jsonwebtoken` with token caching (~18 min reuse, 2 min safety margin). Manages credentials from `~/.aso-mcp/connect-config.json` or env vars (`ASC_ISSUER_ID`, `ASC_KEY_ID`, `ASC_PRIVATE_KEY_PATH`). Reads/writes metadata via App Info Localizations (name + subtitle) and App Store Version Localizations (keywords, description, promotionalText, whatsNew, supportUrl, marketingUrl). Includes `decodeHtmlEntities()` sanitization and editable appInfo selection logic. `getMetadata()` returns `appInfoId` + `versionId` so `updateMetadata()` can reuse them on create paths instead of re-fetching (saves 2 API calls per locale, multiplied across batch updates).
-- **`src/cache/sqlite-cache.ts`**: SQLite with WAL mode. Cache keys are formatted as `type:param1:param2`. Auto-creates `~/.aso-mcp/cache.db`. Max 5000 entries with automatic LRU eviction (`enforceSizeLimit()`). Size check runs every 100 writes (`SIZE_CHECK_INTERVAL`) to keep the hot path fast. `deleteCache(pattern)` for selective LIKE-based invalidation (used by connect tools after writes).
+- **`src/cache/sqlite-cache.ts`**: SQLite with WAL mode. Cache keys are formatted as `type:param1:param2`. Auto-creates `~/.aso-mcp/cache.db`. Max 5000 entries with automatic LRU eviction (`enforceSizeLimit()`, ordered by `last_accessed`). Size check runs every 100 writes (`SIZE_CHECK_INTERVAL`) to keep the hot path fast. `deleteCache(pattern)` for selective LIKE-based invalidation (used by connect tools after writes). Also hosts the durable `ranking_history` table + `recordRankingSnapshots()` / `getRankingHistory()` (see Ranking History section).
 - **`src/utils/`**: Constants (char limits, cache TTLs, rate limits), token bucket rate limiter with exponential backoff retry (3 retries for 429/503/network errors), formatters with central `OPPORTUNITY_TIERS` constants and `classifyOpportunity` / `isHighOpportunity` / `isMediumOrHigherOpportunity` helpers, country code localization with Apple locale mapping (`countryToLocale` throws on unknown 2-char codes; `localeToCountry`).
 - **`src/types/`**: `index.ts` for shared interfaces (including `ConnectLocalization` with `appInfoId` + `versionId`, and the new `CompetitorCoverage` interface used by `analyze_competitors`), `externals.d.ts` for `app-store-scraper` and `aso` module declarations (no @types packages exist).
 
@@ -221,7 +221,7 @@ All tools enforce input constraints via Zod:
 - App Store character limits: Title 30, Subtitle 30, Keyword field 100 (comma-separated, no spaces), Description 4000, Promotional Text 170, What's New 4000.
 - Rate limits: app-store-scraper 20 req/min, aso-scores 10 req/min, app-store-connect 200 req/min. Token acquisition is serialized per source (no concurrent burst past the limit).
 - Retry: 3 attempts with exponential backoff (1s, 2s, 4s) for 429/503/network errors. The `aso-scoring.ts` try/catch is placed OUTSIDE `withRateLimit` so retries actually run before fallback engages.
-- Cache: max 5000 entries, oldest-first (FIFO) eviction, size enforcement throttled to every 100 writes, selective invalidation via `deleteCache(pattern)`. Estimated-score results capped at 600s TTL.
+- Cache: max 5000 entries, LRU eviction (`last_accessed`, pre-1.4.0 DBs auto-migrated), size enforcement throttled to every 100 writes, selective invalidation via `deleteCache(pattern)`. Estimated-score results capped at 600s TTL. Ranking history is durable (400-day retention) and excluded from clear_cache/eviction.
 - Default country is `"tr"` (Turkey) across all tools.
 - Server handles both `SIGINT` and `SIGTERM` for graceful shutdown.
 - All tool descriptions are in English (including Connect tools).
