@@ -72,10 +72,15 @@ export function registerSuggestKeywords(server: McpServer) {
           ...new Set(Object.values(allKeywords).flat()),
         ];
 
+        const SCORE_LIMIT = 30;
         const scoredKeywords = await batchGetScores(
-          uniqueKeywords.slice(0, 30),
+          uniqueKeywords.slice(0, SCORE_LIMIT),
           country
         );
+        const truncationNote =
+          uniqueKeywords.length > SCORE_LIMIT
+            ? `Scored the first ${SCORE_LIMIT} of ${uniqueKeywords.length} unique keywords. The rest are listed unscored under 'strategies'.`
+            : undefined;
 
         // Sort by traffic
         scoredKeywords.sort((a, b) => b.traffic - a.traffic);
@@ -87,6 +92,7 @@ export function registerSuggestKeywords(server: McpServer) {
           country,
           scoresSource,
           scoresNote: scoresSourceNote(scoresSource),
+          truncationNote,
           strategies: allKeywords,
           scoredKeywords,
           totalUniqueKeywords: uniqueKeywords.length,

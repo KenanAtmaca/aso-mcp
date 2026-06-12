@@ -23,7 +23,7 @@ npm install -g aso-mcp
 
 ## Why aso-mcp?
 
-- **19 specialized ASO tools**: from keyword discovery to App Store Connect metadata management
+- **20 specialized ASO tools**: from keyword discovery and ranking trends to App Store Connect metadata management
 - **Real App Store data**: live search results, ratings, reviews, and suggestions
 - **Custom scoring engine**: proprietary algorithm independent of Apple Search Ads API issues
 - **No API key needed**: zero configuration, install and go
@@ -97,7 +97,8 @@ Any MCP-compatible client (ChatGPT, Cursor, Windsurf, etc.) can connect via stdi
 | `analyze_competitors` | Metadata comparison of top apps for a keyword + keyword gap |
 | `optimize_metadata` | Title/subtitle/keyword field suggestions with character limit checks |
 | `analyze_reviews` | Sentiment analysis, complaint and feature request extraction |
-| `track_ranking` | App's ranking position across multiple keywords |
+| `track_ranking` | App's ranking position across multiple keywords (each run saves a local snapshot) |
+| `get_ranking_history` | Position trends over time from saved snapshots: daily positions, change, improving/declining per keyword |
 | `keyword_gap` | Keyword difference between two apps + opportunity analysis |
 
 ### Phase 3: Localization & Reporting

@@ -1,5 +1,5 @@
 /**
- * ASO Generation Tools — Real Scenario Test
+ * ASO Generation Tools - Real Scenario Test
  * Scenario: ASO process from scratch for a new fitness app
  *
  * Run: npx tsx test-generation.ts
@@ -27,7 +27,7 @@ async function test(name: string, fn: () => Promise<void>) {
     console.log(`  ${PASS} ${name}`);
     passed++;
   } catch (err: any) {
-    console.log(`  ${FAIL} ${name} — ${err.message}`);
+    console.log(`  ${FAIL} ${name} - ${err.message}`);
     failed++;
   }
 }
@@ -37,7 +37,7 @@ function assert(condition: boolean, msg: string) {
 }
 
 async function main() {
-  console.log(`\n${BOLD}🚀 ASO Generation — Real Scenario Test${RESET}`);
+  console.log(`\n${BOLD}🚀 ASO Generation - Real Scenario Test${RESET}`);
   console.log(`   Scenario: "FitTrack" calorie tracking app\n`);
   initCache();
 
@@ -75,7 +75,7 @@ async function main() {
       .sort((a, b) => (b.reviews || 0) - (a.reviews || 0))
       .slice(0, 3);
     for (const a of topApps) {
-      console.log(`    ${INFO} ${a.title} — ${a.reviews} reviews`);
+      console.log(`    ${INFO} ${a.title} - ${a.reviews} reviews`);
     }
   });
 
@@ -132,7 +132,7 @@ async function main() {
 
     console.log(`    ${INFO} Competition score: ${compScore.toFixed(1)} (${compScore > 7 ? "High" : compScore > 4 ? "Medium" : "Low"})`);
     for (const c of competitors.slice(0, 3)) {
-      console.log(`    ${INFO} "${c.title}" (${c.titleLength} chars) — Keywords: [${c.titleKeywords.join(", ")}]`);
+      console.log(`    ${INFO} "${c.title}" (${c.titleLength} chars) - Keywords: [${c.titleKeywords.join(", ")}]`);
     }
 
     // Common keywords
@@ -183,7 +183,7 @@ async function main() {
     for (const c of APP.countries) {
       const scores = await getScores(keyword, c);
       const apps = await searchApps(keyword, c, 1);
-      const topApp = (apps[0] as any)?.title || "—";
+      const topApp = (apps[0] as any)?.title || "-";
       console.log(`    ${INFO} ${getCountryName(c)}: traffic=${scores.traffic}, #1="${topApp}"`);
     }
   });

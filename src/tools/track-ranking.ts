@@ -1,7 +1,11 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { searchApps } from "../data-sources/app-store.js";
-import { getFromCache, setCache } from "../cache/sqlite-cache.js";
+import {
+  getFromCache,
+  setCache,
+  recordRankingSnapshots,
+} from "../cache/sqlite-cache.js";
 import { CACHE_TTL } from "../utils/constants.js";
 
 export function registerTrackRanking(server: McpServer) {
@@ -80,6 +84,15 @@ export function registerTrackRanking(server: McpServer) {
           })
         );
 
+        // Persist snapshots for trend analysis (get_ranking_history).
+        // Failed searches are not data points, so they are skipped.
+        const validRankings = rankings.filter((r) => r.topApp !== "Error");
+        recordRankingSnapshots(
+          appId.trim().toLowerCase(),
+          country.toLowerCase(),
+          validRankings
+        );
+
         // Summary
         const found = rankings.filter((r) => r.position !== null);
         const top10 = found.filter((r) => r.position! <= 10);
@@ -102,6 +115,9 @@ export function registerTrackRanking(server: McpServer) {
               ? found.sort((a, b) => a.position! - b.position!)[0].keyword
               : null,
           },
+          snapshotsRecorded: validRankings.length,
+          historyHint:
+            "Snapshots saved locally. Use get_ranking_history to see position trends over time.",
         };
 
         const resultText = JSON.stringify(result, null, 2);

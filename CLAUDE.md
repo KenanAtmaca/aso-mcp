@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 - **npm:** https://www.npmjs.com/package/aso-mcp
 - **GitHub:** https://github.com/KenanAtmaca/aso-mcp
-- **Version:** 1.3.0
+- **Version:** 1.4.0
 - **Install:** `npm install -g aso-mcp` or `npx aso-mcp`
 
 The server reads its version dynamically from `package.json` at startup (`src/server.ts`), so MCP clients always see the published version without a manual sync step.
@@ -33,11 +33,11 @@ npm publish --access public     # Publish to npm (requires auth token)
 
 ## Architecture
 
-**MCP Server** serving 19 tools over stdio transport. Tools are registered in `src/server.ts` grouped by phase.
+**MCP Server** serving 20 tools over stdio transport. Tools are registered in `src/server.ts` grouped by phase.
 
 **Data flow:** Tool Handler → Zod Validation (min/max constraints) → SQLite Cache check → Rate Limiter (token bucket + exponential backoff retry) → Data Source → Custom Scoring (fallback) → Cache result (max 5000 entries) → Return JSON to client.
 
-### Tools (19)
+### Tools (20)
 
 | # | Tool | Phase | Description |
 |---|------|-------|-------------|
@@ -47,19 +47,20 @@ npm publish --access public     # Publish to npm (requires auth token)
 | 4 | `analyze_competitors` | 2 | Top-ranking apps comparison. Returns `commonKeywords`, `uniqueKeywords`, and `competitorCoverage` (per-app missing common analysis) |
 | 5 | `optimize_metadata` | 2 | Title/subtitle/keyword field optimization suggestions |
 | 6 | `analyze_reviews` | 2 | Sentiment analysis hybrid (keyword score + star-rating weight, fixes sarcastic reviews), complaints, feature requests |
-| 7 | `track_ranking` | 2 | App ranking position for specific keywords. ID match cleanly distinguishes numeric track IDs from bundle IDs |
-| 8 | `keyword_gap` | 2 | Keyword difference between two apps (batch scoring) |
-| 9 | `localized_keywords` | 3 | Multi-country keyword score comparison (parallel per country). Cache key sorts keywords + countries |
-| 10 | `get_aso_report` | 3 | Comprehensive ASO report for an app |
-| 11 | `discover_keywords` | Gen | Keyword discovery from scratch for new apps. Brand stop list filters competitor names from suggestions |
-| 12 | `generate_aso_brief` | Gen | Complete ASO brief: greedy keyword-field packer, concrete suggested title + subtitle with char counts, parallel multi-market scoring |
-| 13 | `connect_setup` | 5 | Configure & validate App Store Connect credentials |
-| 14 | `connect_get_app` | 5 | Find app by bundle ID, get ASC ID + version state |
-| 15 | `connect_get_metadata` | 5 | Read current metadata (name, subtitle, keywords, desc, supportUrl, marketingUrl) for a locale. Returns `appInfoId` + `versionId` for reuse |
-| 16 | `connect_update_metadata` | 5 | Write metadata with char limit validation, HTML entity sanitization, cache invalidation, before/after diff. Reuses parent IDs from getMetadata |
-| 17 | `connect_batch_update_metadata` | 5 | Batch update metadata for multiple locales in one call (max 40 locales) |
-| 18 | `connect_list_localizations` | 5 | List all locales and metadata completeness status |
-| 19 | `clear_cache` | Util | Clear local SQLite cache |
+| 7 | `track_ranking` | 2 | App ranking position for specific keywords. ID match cleanly distinguishes numeric track IDs from bundle IDs. Each fresh run saves snapshots to `ranking_history` |
+| 8 | `get_ranking_history` | 2 | Position trends over time from locally saved track_ranking snapshots: daily positions, best/worst, change, improving/declining/stable per keyword |
+| 9 | `keyword_gap` | 2 | Keyword difference between two apps (batch scoring) |
+| 10 | `localized_keywords` | 3 | Multi-country keyword score comparison (parallel per country). Cache key sorts keywords + countries |
+| 11 | `get_aso_report` | 3 | Comprehensive ASO report for an app |
+| 12 | `discover_keywords` | Gen | Keyword discovery from scratch for new apps. Brand stop list filters competitor names from suggestions |
+| 13 | `generate_aso_brief` | Gen | Complete ASO brief: greedy keyword-field packer, concrete suggested title + subtitle with char counts, parallel multi-market scoring |
+| 14 | `connect_setup` | 5 | Configure & validate App Store Connect credentials |
+| 15 | `connect_get_app` | 5 | Find app by bundle ID, get ASC ID + version state |
+| 16 | `connect_get_metadata` | 5 | Read current metadata (name, subtitle, keywords, desc, supportUrl, marketingUrl) for a locale. Returns `appInfoId` + `versionId` for reuse |
+| 17 | `connect_update_metadata` | 5 | Write metadata with char limit validation, HTML entity sanitization, cache invalidation, before/after diff. Reuses parent IDs from getMetadata |
+| 18 | `connect_batch_update_metadata` | 5 | Batch update metadata for multiple locales in one call (max 40 locales) |
+| 19 | `connect_list_localizations` | 5 | List all locales and metadata completeness status |
+| 20 | `clear_cache` | Util | Clear local SQLite cache (does NOT touch ranking history) |
 
 ### Key Layers
 
@@ -118,7 +119,7 @@ The rate limiter (`src/utils/rate-limiter.ts`) includes automatic retry with exp
 ### Cache System
 
 - SQLite with WAL mode at `~/.aso-mcp/cache.db`.
-- Max 5000 entries; oldest entries (by `created_at`, FIFO) evicted when limit exceeded.
+- Max 5000 entries; least recently used entries evicted when limit exceeded (`last_accessed` column, touched on every cache hit; pre-1.4.0 DBs are migrated via ALTER TABLE on startup).
 - Size enforcement throttled to once per 100 writes (was per-write before v1.2.0).
 - `deleteCache(pattern)` uses SQL LIKE for selective invalidation (e.g. `connect-metadata:${appId}:%`).
 - `connect_update_metadata` and `connect_batch_update_metadata` automatically invalidate related cache entries after successful writes.
@@ -169,6 +170,15 @@ These helpers shape what `discover_keywords`, `generate_aso_brief`, and `analyze
 - **Concrete title + subtitle suggestions** in `generate-aso-brief.ts`: greedy-fits the highest-traffic keywords after the app name into the 30-char title limit and into the 30-char subtitle limit, then surfaces both literal strings + char counts in `metadataGuidelines` and the `actionPlan` so AI clients can copy-paste directly.
 - **Hybrid sentiment** in `analyze-reviews.ts`: `analyzeSentiment(text, rating?)` weights the star rating equivalent to two strong sentiment words. A 1-star review saying `harika çalışıyor` (sarcasm) gets the rating's negative signal added to the keyword score and is correctly classified as negative. Falls back to pure keyword count when no rating is provided.
 - **`OPPORTUNITY_TIERS`** in `formatters.ts`: HIGH=7, MEDIUM=5, LOW=3. Replaces scattered ad-hoc thresholds. `classifyOpportunity(score)` returns `{ tier, label }`; `isHighOpportunity` and `isMediumOrHigherOpportunity` are filter shorthands used across `discover_keywords`, `generate_aso_brief`, and `suggest_keywords`.
+
+### Ranking History (v1.4.0)
+
+`track_ranking` persists every fresh (non-cached, non-errored) result as snapshots in the `ranking_history` table inside `~/.aso-mcp/cache.db`. `get_ranking_history` reads them back as trends:
+
+- Table: `app_id`, `keyword` (lowercased), `country`, `position` (NULL = not in top 100), `total_results`, `top_app`, `recorded_at`. Indexed on (app_id, country, keyword, recorded_at).
+- History is durable: `clear_cache` and LRU eviction never touch it. Retention is 400 days (pruned on startup).
+- `get_ranking_history` collapses snapshots to one point per day (last snapshot wins), computes per-keyword `bestPosition` / `worstPosition` / `positionChange` / `trend` (improving / declining / stable / insufficient-data), and a summary with the best mover. "Not ranked" is treated as position 101 for trend math so dropping out of the top 100 counts as a decline.
+- The tool reads only the local DB (no API calls, no cache entry).
 
 ### Performance Optimizations
 

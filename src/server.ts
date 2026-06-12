@@ -17,6 +17,7 @@ import { registerAnalyzeCompetitors } from "./tools/analyze-competitors.js";
 import { registerOptimizeMetadata } from "./tools/optimize-metadata.js";
 import { registerAnalyzeReviews } from "./tools/analyze-reviews.js";
 import { registerTrackRanking } from "./tools/track-ranking.js";
+import { registerGetRankingHistory } from "./tools/get-ranking-history.js";
 import { registerKeywordGap } from "./tools/keyword-gap.js";
 
 // Phase 3 tools
@@ -65,6 +66,7 @@ registerAnalyzeCompetitors(server);
 registerOptimizeMetadata(server);
 registerAnalyzeReviews(server);
 registerTrackRanking(server);
+registerGetRankingHistory(server);
 registerKeywordGap(server);
 
 // Register Phase 3 tools

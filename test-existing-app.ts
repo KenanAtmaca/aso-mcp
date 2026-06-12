@@ -1,5 +1,5 @@
 /**
- * Existing App ASO Generation — Live Test
+ * Existing App ASO Generation - Live Test
  * Scenario: ASO improvement for the Shazam app
  */
 import { getAppDetails, searchApps } from "./src/data-sources/app-store.js";

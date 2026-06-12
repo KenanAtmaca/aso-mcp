@@ -1,5 +1,5 @@
 /**
- * ASO MCP Server — App Store Connect Test Suite
+ * ASO MCP Server - App Store Connect Test Suite
  * Tests locale mapping, constants, and optionally live API calls.
  *
  * Run (no credentials needed):
@@ -28,13 +28,13 @@ async function test(name: string, fn: () => Promise<void>) {
     console.log(`  ${PASS} ${name}`);
     passed++;
   } catch (err: any) {
-    console.log(`  ${FAIL} ${name} — ${err.message}`);
+    console.log(`  ${FAIL} ${name} - ${err.message}`);
     failed++;
   }
 }
 
 function skip(name: string, reason: string) {
-  console.log(`  ${SKIP} ${name} — ${reason}`);
+  console.log(`  ${SKIP} ${name} - ${reason}`);
   skipped++;
 }
 
@@ -43,14 +43,14 @@ function assert(condition: boolean, msg: string) {
 }
 
 async function main() {
-  console.log("\n🔌 ASO MCP Server — App Store Connect Test Suite\n");
+  console.log("\n🔌 ASO MCP Server - App Store Connect Test Suite\n");
 
   initCache();
 
   // ─── 1. Locale Mapping ───
   console.log("🌍 Locale Mapping");
 
-  await test("countryToLocale — basic mapping", async () => {
+  await test("countryToLocale - basic mapping", async () => {
     assert(countryToLocale("us") === "en-US", `Expected en-US, got ${countryToLocale("us")}`);
     assert(countryToLocale("tr") === "tr", `Expected tr, got ${countryToLocale("tr")}`);
     assert(countryToLocale("de") === "de-DE", `Expected de-DE, got ${countryToLocale("de")}`);
@@ -59,13 +59,13 @@ async function main() {
     assert(countryToLocale("cn") === "zh-Hans", `Expected zh-Hans, got ${countryToLocale("cn")}`);
   });
 
-  await test("countryToLocale — Apple locale passthrough", async () => {
+  await test("countryToLocale - Apple locale passthrough", async () => {
     assert(countryToLocale("en-US") === "en-US", "Should pass through en-US");
     assert(countryToLocale("zh-Hans") === "zh-Hans", "Should pass through zh-Hans");
     assert(countryToLocale("pt-BR") === "pt-BR", "Should pass through pt-BR");
   });
 
-  await test("countryToLocale — unknown country throws", async () => {
+  await test("countryToLocale - unknown country throws", async () => {
     let threw = false;
     try {
       countryToLocale("zz");
@@ -79,13 +79,13 @@ async function main() {
     assert(threw, "Unknown 2-char country code should throw (fail loud)");
   });
 
-  await test("localeToCountry — reverse mapping", async () => {
+  await test("localeToCountry - reverse mapping", async () => {
     assert(localeToCountry("en-US") === "us", `Expected us, got ${localeToCountry("en-US")}`);
     assert(localeToCountry("de-DE") === "de", `Expected de, got ${localeToCountry("de-DE")}`);
     assert(localeToCountry("ja") === "jp", `Expected jp, got ${localeToCountry("ja")}`);
   });
 
-  await test("COUNTRY_TO_LOCALE — has 20 entries", async () => {
+  await test("COUNTRY_TO_LOCALE - has 20 entries", async () => {
     const count = Object.keys(COUNTRY_TO_LOCALE).length;
     assert(count === 20, `Expected 20 entries, got ${count}`);
   });
@@ -93,25 +93,25 @@ async function main() {
   // ─── 2. Constants ───
   console.log("\n📐 Constants");
 
-  await test("CACHE_TTL — Connect values exist", async () => {
+  await test("CACHE_TTL - Connect values exist", async () => {
     assert(CACHE_TTL.CONNECT_APP === 1800, `Expected 1800, got ${CACHE_TTL.CONNECT_APP}`);
     assert(CACHE_TTL.CONNECT_METADATA === 300, `Expected 300, got ${CACHE_TTL.CONNECT_METADATA}`);
     assert(CACHE_TTL.CONNECT_LOCALIZATIONS === 600, `Expected 600, got ${CACHE_TTL.CONNECT_LOCALIZATIONS}`);
   });
 
-  await test("RATE_LIMITS — Connect rate limit exists", async () => {
+  await test("RATE_LIMITS - Connect rate limit exists", async () => {
     const rl = RATE_LIMITS["app-store-connect"];
     assert(rl.maxRequests === 200, `Expected 200 max requests, got ${rl.maxRequests}`);
     assert(rl.windowMs === 60_000, `Expected 60000 window, got ${rl.windowMs}`);
   });
 
-  await test("CHAR_LIMITS — new fields exist", async () => {
+  await test("CHAR_LIMITS - new fields exist", async () => {
     assert(CHAR_LIMITS.DESCRIPTION === 4000, `Expected 4000, got ${CHAR_LIMITS.DESCRIPTION}`);
     assert(CHAR_LIMITS.PROMOTIONAL_TEXT === 170, `Expected 170, got ${CHAR_LIMITS.PROMOTIONAL_TEXT}`);
     assert(CHAR_LIMITS.WHATS_NEW === 4000, `Expected 4000, got ${CHAR_LIMITS.WHATS_NEW}`);
   });
 
-  await test("CHAR_LIMITS — existing fields preserved", async () => {
+  await test("CHAR_LIMITS - existing fields preserved", async () => {
     assert(CHAR_LIMITS.TITLE === 30, `Expected 30, got ${CHAR_LIMITS.TITLE}`);
     assert(CHAR_LIMITS.SUBTITLE === 30, `Expected 30, got ${CHAR_LIMITS.SUBTITLE}`);
     assert(CHAR_LIMITS.KEYWORD_FIELD === 100, `Expected 100, got ${CHAR_LIMITS.KEYWORD_FIELD}`);
@@ -142,7 +142,7 @@ async function main() {
 
     const config = loadConfig()!;
 
-    await test("validateCredentials — test API call", async () => {
+    await test("validateCredentials - test API call", async () => {
       const valid = await validateCredentials(config);
       assert(valid === true, "Credentials should be valid");
     });
@@ -154,7 +154,7 @@ async function main() {
     } else {
       let appId: string;
 
-      await test(`getApp — ${testBundleId}`, async () => {
+      await test(`getApp - ${testBundleId}`, async () => {
         const app = await getApp(config, testBundleId);
         assert(!!app.id, "App should have an ID");
         assert(app.bundleId === testBundleId, `Bundle ID should match`);
@@ -162,7 +162,7 @@ async function main() {
         console.log(`    ${INFO} App: ${app.name} (${app.id}), version state: ${app.versionState ?? "none"}`);
       });
 
-      await test("getMetadata — primary locale", async () => {
+      await test("getMetadata - primary locale", async () => {
         const metadata = await getMetadata(config, appId, "tr");
         assert(!!metadata.locale, "Should have locale");
         console.log(`    ${INFO} Locale: ${metadata.locale}, subtitle: ${metadata.subtitle ?? "(empty)"}, keywords: ${metadata.keywordsLength} chars`);

@@ -1,5 +1,5 @@
 /**
- * ASO MCP Server — Manual Test Script
+ * ASO MCP Server - Manual Test Script
  * Tests all tool data sources directly.
  *
  * Run: npx tsx test.ts
@@ -7,7 +7,14 @@
 
 import { searchApps, getAppDetails, getReviews, getSuggestions } from "./src/data-sources/app-store.js";
 import { getScores, suggestKeywords } from "./src/data-sources/aso-scoring.js";
-import { initCache, getFromCache, setCache, getCacheStats } from "./src/cache/sqlite-cache.js";
+import {
+  initCache,
+  getFromCache,
+  setCache,
+  getCacheStats,
+  recordRankingSnapshots,
+  getRankingHistory,
+} from "./src/cache/sqlite-cache.js";
 import { extractTitleKeywords, calculateCompetitiveScore, calculateOpportunityScore } from "./src/data-sources/custom-scoring.js";
 
 const PASS = "\x1b[32m✓\x1b[0m";
@@ -24,7 +31,7 @@ async function test(name: string, fn: () => Promise<void>) {
     console.log(`  ${PASS} ${name}`);
     passed++;
   } catch (err: any) {
-    console.log(`  ${FAIL} ${name} — ${err.message}`);
+    console.log(`  ${FAIL} ${name} - ${err.message}`);
     failed++;
   }
 }
@@ -34,7 +41,7 @@ function assert(condition: boolean, msg: string) {
 }
 
 async function main() {
-  console.log("\n🔧 ASO MCP Server — Full Test Suite\n");
+  console.log("\n🔧 ASO MCP Server - Full Test Suite\n");
 
   // ─── 1. Cache ───
   console.log("📦 Cache Layer");
@@ -49,6 +56,24 @@ async function main() {
     setCache("test-key", "test-value", 60);
     const val = getFromCache("test-key");
     assert(val === "test-value", `Expected: test-value, Got: ${val}`);
+  });
+
+  await test("Ranking history record & read", async () => {
+    const testAppId = `test-history-app-${Date.now()}`;
+    recordRankingSnapshots(testAppId, "tr", [
+      { keyword: "Test Keyword", position: 12, totalResults: 100, topApp: "Top App" },
+      { keyword: "other kw", position: null, totalResults: 80, topApp: "Top App 2" },
+    ]);
+    const rows = getRankingHistory(testAppId, "tr", 1);
+    assert(rows.length === 2, `Expected 2 rows, got ${rows.length}`);
+    const kw = rows.find((r) => r.keyword === "test keyword");
+    assert(kw !== undefined, "Keyword should be stored lowercased");
+    assert(kw!.position === 12, `Expected position 12, got ${kw!.position}`);
+    const filtered = getRankingHistory(testAppId, "tr", 1, ["Test Keyword"]);
+    assert(filtered.length === 1, `Keyword filter should return 1 row, got ${filtered.length}`);
+    const otherCountry = getRankingHistory(testAppId, "us", 1);
+    assert(otherCountry.length === 0, "Different country should have no history");
+    console.log(`    ${INFO} 2 snapshots recorded, filter + country isolation OK`);
   });
 
   // ─── 2. Custom Scoring ───
@@ -80,27 +105,27 @@ async function main() {
   // ─── 3. App Store Scraper ───
   console.log("\n🍎 App Store Scraper");
 
-  await test("searchApps — 'fitness' TR", async () => {
+  await test("searchApps - 'fitness' TR", async () => {
     const apps = await searchApps("fitness", "tr", 5);
     assert(Array.isArray(apps), "Should return array");
     assert(apps.length > 0, "Should have results");
-    console.log(`    ${INFO} ${apps.length} apps found — First: "${(apps[0] as any).title}"`);
+    console.log(`    ${INFO} ${apps.length} apps found - First: "${(apps[0] as any).title}"`);
   });
 
-  await test("getAppDetails — Spotify (bundle ID)", async () => {
+  await test("getAppDetails - Spotify (bundle ID)", async () => {
     const app = await getAppDetails("com.spotify.client", "tr");
     assert(app.title != null, "title should exist");
     assert(app.score > 0, "rating should be > 0");
-    console.log(`    ${INFO} ${app.title} — Rating: ${app.score} — ${app.reviews} reviews`);
+    console.log(`    ${INFO} ${app.title} - Rating: ${app.score} - ${app.reviews} reviews`);
   });
 
-  await test("getAppDetails — numeric ID (Spotify: 324684580)", async () => {
+  await test("getAppDetails - numeric ID (Spotify: 324684580)", async () => {
     const app = await getAppDetails("324684580", "tr");
     assert(app.title != null, "title should exist");
     console.log(`    ${INFO} ${app.title}`);
   });
 
-  await test("getReviews — Spotify TR", async () => {
+  await test("getReviews - Spotify TR", async () => {
     const reviews = await getReviews(324684580, "tr", 1);
     assert(Array.isArray(reviews), "Should return array");
     console.log(`    ${INFO} ${reviews.length} reviews fetched`);
@@ -110,7 +135,7 @@ async function main() {
     }
   });
 
-  await test("getSuggestions — 'music'", async () => {
+  await test("getSuggestions - 'music'", async () => {
     const suggestions = await getSuggestions("music");
     assert(Array.isArray(suggestions), "Should return array");
     assert(suggestions.length > 0, "Should have suggestions");
@@ -120,7 +145,7 @@ async function main() {
   // ─── 4. ASO Scoring (with fallback) ───
   console.log("\n📊 ASO Scoring (aso package or fallback)");
 
-  await test("getScores — 'fitness tracker' US", async () => {
+  await test("getScores - 'fitness tracker' US", async () => {
     const scores = await getScores("fitness tracker", "us");
     assert(typeof scores.traffic === "number", "traffic should exist");
     assert(typeof scores.difficulty === "number", "difficulty should exist");
@@ -129,19 +154,19 @@ async function main() {
     console.log(`    ${INFO} Traffic: ${scores.traffic}, Difficulty: ${scores.difficulty}`);
   });
 
-  await test("getScores — 'muzik' TR", async () => {
+  await test("getScores - 'muzik' TR", async () => {
     const scores = await getScores("muzik", "tr");
     assert(typeof scores.traffic === "number", "traffic should exist");
     console.log(`    ${INFO} Traffic: ${scores.traffic}, Difficulty: ${scores.difficulty}`);
   });
 
-  await test("getScores — 'photo editor' US", async () => {
+  await test("getScores - 'photo editor' US", async () => {
     const scores = await getScores("photo editor", "us");
     assert(scores.traffic > 0, "traffic > 0 expected");
     console.log(`    ${INFO} Traffic: ${scores.traffic}, Difficulty: ${scores.difficulty}`);
   });
 
-  await test("suggestKeywords — Spotify (competition)", async () => {
+  await test("suggestKeywords - Spotify (competition)", async () => {
     const keywords = await suggestKeywords("324684580", "competition", "tr", 10);
     assert(Array.isArray(keywords), "Should return array");
     console.log(`    ${INFO} ${keywords.length} keywords suggested: ${keywords.slice(0, 5).join(", ")}`);

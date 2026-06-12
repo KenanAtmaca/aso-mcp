@@ -22,7 +22,7 @@ async function test(name: string, fn: () => Promise<void>) {
     console.log(`  ${PASS} ${name}`);
     passed++;
   } catch (err: any) {
-    console.log(`  ${FAIL} ${name} — ${err.message}`);
+    console.log(`  ${FAIL} ${name} - ${err.message}`);
     failed++;
   }
 }
@@ -32,7 +32,7 @@ function assert(condition: boolean, msg: string) {
 }
 
 async function main() {
-  console.log("\n🔧 Phase 3 — Integration Tests\n");
+  console.log("\n🔧 Phase 3 - Integration Tests\n");
   initCache();
 
   // ─── localized_keywords scenario ───
@@ -135,7 +135,7 @@ async function main() {
       reviewCount: app.reviews || 0,
     });
 
-    console.log(`    ${INFO} ${app.title} — Rating: ${app.score}, Reviews: ${app.reviews}`);
+    console.log(`    ${INFO} ${app.title} - Rating: ${app.score}, Reviews: ${app.reviews}`);
     console.log(`    ${INFO} Keywords: [${titleKeywords.join(", ")}]`);
     console.log(`    ${INFO} Visibility: ${visibility.toFixed(1)}`);
   });
