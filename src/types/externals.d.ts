@@ -33,6 +33,7 @@ declare module "app-store-scraper" {
 
   interface SuggestOptions {
     term: string;
+    country?: string;
   }
 
   interface AppResult {
@@ -66,7 +67,7 @@ declare module "app-store-scraper" {
     similar(options: SimilarOptions): Promise<AppResult[]>;
     reviews(options: ReviewOptions): Promise<any[]>;
     ratings(options: RatingOptions): Promise<any>;
-    suggest(options: SuggestOptions): Promise<string[]>;
+    suggest(options: SuggestOptions): Promise<Array<{ term: string }>>;
     sort: {
       RECENT: number;
       HELPFUL: number;

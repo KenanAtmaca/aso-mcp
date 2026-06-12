@@ -202,75 +202,97 @@ export async function getMetadata(
 ): Promise<ConnectLocalization> {
   const resolvedLocale = countryToLocale(locale);
 
-  // Fetch app info localizations (name + subtitle)
-  let name: string | null = null;
-  let subtitle: string | null = null;
-  let appInfoLocalizationId: string | null = null;
-  let resolvedAppInfoId: string | null = null;
+  // The appInfo branch and the version branch are independent chains of two
+  // requests each; running them in parallel halves read latency, which adds
+  // up in connect_batch_update_metadata across up to 40 locales.
+  const [appInfoData, versionData] = await Promise.all([
+    (async () => {
+      const data = {
+        name: null as string | null,
+        subtitle: null as string | null,
+        appInfoLocalizationId: null as string | null,
+        appInfoId: null as string | null,
+      };
+      try {
+        const appInfosResponse = await apiRequest(
+          config,
+          `/v1/apps/${appId}/appInfos`
+        );
+        const allInfos = appInfosResponse.data ?? [];
+        const editableInfo = allInfos.find(
+          (info: any) => info.attributes?.appStoreState !== "READY_FOR_SALE"
+        );
+        data.appInfoId = editableInfo?.id ?? allInfos[0]?.id ?? null;
 
-  try {
-    const appInfosResponse = await apiRequest(
-      config,
-      `/v1/apps/${appId}/appInfos`
-    );
-    const allInfos = appInfosResponse.data ?? [];
-    const editableInfo = allInfos.find(
-      (info: any) => info.attributes?.appStoreState !== "READY_FOR_SALE"
-    );
-    resolvedAppInfoId = editableInfo?.id ?? allInfos[0]?.id ?? null;
-
-    if (resolvedAppInfoId) {
-      const locResponse = await apiRequest(
-        config,
-        `/v1/appInfos/${resolvedAppInfoId}/appInfoLocalizations?filter[locale]=${resolvedLocale}`
-      );
-      const loc = locResponse.data?.[0];
-      if (loc) {
-        appInfoLocalizationId = loc.id;
-        name = loc.attributes?.name ?? null;
-        subtitle = loc.attributes?.subtitle ?? null;
+        if (data.appInfoId) {
+          const locResponse = await apiRequest(
+            config,
+            `/v1/appInfos/${data.appInfoId}/appInfoLocalizations?filter[locale]=${resolvedLocale}`
+          );
+          const loc = locResponse.data?.[0];
+          if (loc) {
+            data.appInfoLocalizationId = loc.id;
+            data.name = loc.attributes?.name ?? null;
+            data.subtitle = loc.attributes?.subtitle ?? null;
+          }
+        }
+      } catch {
+        // App info not available
       }
-    }
-  } catch {
-    // App info not available
-  }
+      return data;
+    })(),
+    (async () => {
+      const data = {
+        keywords: null as string | null,
+        description: null as string | null,
+        promotionalText: null as string | null,
+        whatsNew: null as string | null,
+        supportUrl: null as string | null,
+        marketingUrl: null as string | null,
+        versionLocalizationId: null as string | null,
+        versionId: null as string | null,
+      };
+      try {
+        const versionsResponse = await apiRequest(
+          config,
+          `/v1/apps/${appId}/appStoreVersions?filter[appStoreState]=PREPARE_FOR_SUBMISSION&limit=1`
+        );
+        data.versionId = versionsResponse.data?.[0]?.id ?? null;
 
-  // Fetch version localizations (keywords, description, etc.)
-  let keywords: string | null = null;
-  let description: string | null = null;
-  let promotionalText: string | null = null;
-  let whatsNew: string | null = null;
-  let supportUrl: string | null = null;
-  let marketingUrl: string | null = null;
-  let versionLocalizationId: string | null = null;
-  let resolvedVersionId: string | null = null;
-
-  try {
-    const versionsResponse = await apiRequest(
-      config,
-      `/v1/apps/${appId}/appStoreVersions?filter[appStoreState]=PREPARE_FOR_SUBMISSION&limit=1`
-    );
-    resolvedVersionId = versionsResponse.data?.[0]?.id ?? null;
-
-    if (resolvedVersionId) {
-      const verLocResponse = await apiRequest(
-        config,
-        `/v1/appStoreVersions/${resolvedVersionId}/appStoreVersionLocalizations?filter[locale]=${resolvedLocale}`
-      );
-      const verLoc = verLocResponse.data?.[0];
-      if (verLoc) {
-        versionLocalizationId = verLoc.id;
-        keywords = verLoc.attributes?.keywords ?? null;
-        description = verLoc.attributes?.description ?? null;
-        promotionalText = verLoc.attributes?.promotionalText ?? null;
-        whatsNew = verLoc.attributes?.whatsNew ?? null;
-        supportUrl = verLoc.attributes?.supportUrl ?? null;
-        marketingUrl = verLoc.attributes?.marketingUrl ?? null;
+        if (data.versionId) {
+          const verLocResponse = await apiRequest(
+            config,
+            `/v1/appStoreVersions/${data.versionId}/appStoreVersionLocalizations?filter[locale]=${resolvedLocale}`
+          );
+          const verLoc = verLocResponse.data?.[0];
+          if (verLoc) {
+            data.versionLocalizationId = verLoc.id;
+            data.keywords = verLoc.attributes?.keywords ?? null;
+            data.description = verLoc.attributes?.description ?? null;
+            data.promotionalText = verLoc.attributes?.promotionalText ?? null;
+            data.whatsNew = verLoc.attributes?.whatsNew ?? null;
+            data.supportUrl = verLoc.attributes?.supportUrl ?? null;
+            data.marketingUrl = verLoc.attributes?.marketingUrl ?? null;
+          }
+        }
+      } catch {
+        // Version localizations not available
       }
-    }
-  } catch {
-    // Version localizations not available
-  }
+      return data;
+    })(),
+  ]);
+
+  const { name, subtitle, appInfoLocalizationId, appInfoId: resolvedAppInfoId } = appInfoData;
+  const {
+    keywords,
+    description,
+    promotionalText,
+    whatsNew,
+    supportUrl,
+    marketingUrl,
+    versionLocalizationId,
+    versionId: resolvedVersionId,
+  } = versionData;
 
   return {
     locale: resolvedLocale,
@@ -395,14 +417,16 @@ async function createVersionLocalization(
 // ─── Decode HTML Entities ───
 
 function decodeHtmlEntities(text: string): string {
+  // &amp; must be decoded LAST: decoding it first turns "&amp;lt;" into
+  // "&lt;" which the later passes would then double-decode into "<".
   return text
-    .replace(/&amp;/g, "&")
     .replace(/&lt;/g, "<")
     .replace(/&gt;/g, ">")
     .replace(/&quot;/g, '"')
     .replace(/&#39;/g, "'")
     .replace(/&#x27;/g, "'")
-    .replace(/&#x2F;/g, "/");
+    .replace(/&#x2F;/g, "/")
+    .replace(/&amp;/g, "&");
 }
 
 function sanitizeUpdates(updates: ConnectMetadataUpdate): ConnectMetadataUpdate {

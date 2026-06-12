@@ -35,14 +35,23 @@ async function getClient(country: string = "tr"): Promise<any> {
  *   3) Average review depth: many established apps signals broad interest
  * Difficulty is calculated from rating/review strength of top-ranking apps.
  */
+export type ScoreSource = "apple" | "estimated";
+
+export interface KeywordScores {
+  traffic: number;
+  difficulty: number;
+  /** "apple": real aso package scores. "estimated": fallback multi-signal estimate. */
+  source: ScoreSource;
+}
+
 async function fallbackScores(
   keyword: string,
   country: string
-): Promise<{ traffic: number; difficulty: number }> {
+): Promise<KeywordScores> {
   const results = await searchApps(keyword, country, 20);
 
   if (results.length === 0) {
-    return { traffic: 1, difficulty: 1 };
+    return { traffic: 1, difficulty: 1, source: "estimated" };
   }
 
   const top1Reviews = (results[0] as any)?.reviews || 0;
@@ -75,13 +84,14 @@ async function fallbackScores(
   return {
     traffic: Math.round(traffic * 10) / 10,
     difficulty: Math.round(difficulty * 10) / 10,
+    source: "estimated",
   };
 }
 
 export async function getScores(
   keyword: string,
   country: string = "tr"
-): Promise<{ traffic: number; difficulty: number }> {
+): Promise<KeywordScores> {
   // If the aso package has previously failed, check if enough time passed to retry
   if (!asoAvailable) {
     if (Date.now() - asoFailedAt < ASO_RETRY_INTERVAL_MS) {
@@ -100,6 +110,7 @@ export async function getScores(
       return {
         traffic: result.traffic ?? 0,
         difficulty: result.difficulty ?? 0,
+        source: "apple" as const,
       };
     });
   } catch {
@@ -150,22 +161,24 @@ export async function suggestKeywords(
  * Score multiple keywords in parallel with a concurrency limit.
  * Returns results in the same order as input keywords.
  */
+export type BatchScoreResult = KeywordScores & { keyword: string };
+
 export async function batchGetScores(
   keywords: string[],
   country: string = "tr",
   concurrency: number = 5
-): Promise<{ keyword: string; traffic: number; difficulty: number }[]> {
-  const results: { keyword: string; traffic: number; difficulty: number }[] = [];
+): Promise<BatchScoreResult[]> {
+  const results: BatchScoreResult[] = [];
 
   for (let i = 0; i < keywords.length; i += concurrency) {
     const batch = keywords.slice(i, i + concurrency);
     const batchResults = await Promise.all(
-      batch.map(async (kw) => {
+      batch.map(async (kw): Promise<BatchScoreResult> => {
         try {
           const scores = await getScores(kw, country);
-          return { keyword: kw, traffic: scores.traffic, difficulty: scores.difficulty };
+          return { keyword: kw, ...scores };
         } catch {
-          return { keyword: kw, traffic: 0, difficulty: 0 };
+          return { keyword: kw, traffic: 0, difficulty: 0, source: "estimated" };
         }
       })
     );
@@ -200,7 +213,7 @@ async function fallbackSuggest(
 
     // Seed autocomplete with the full title (catches multi-word brand suggestions)
     try {
-      const titleSuggestions = await getSuggestions(app.title);
+      const titleSuggestions = await getSuggestions(app.title, country);
       titleSuggestions.forEach((s: string) => allSuggestions.add(s));
     } catch {
       // continue
@@ -210,7 +223,7 @@ async function fallbackSuggest(
     for (const term of titleKeywords.slice(0, 3)) {
       if (allSuggestions.size >= num) break;
       try {
-        const more = await getSuggestions(term);
+        const more = await getSuggestions(term, country);
         more.forEach((s: string) => allSuggestions.add(s));
       } catch {
         // continue

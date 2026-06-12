@@ -8,6 +8,11 @@ import {
   extractTitleKeywords,
   calculateOpportunityScore,
 } from "../data-sources/custom-scoring.js";
+import {
+  scoresCacheTtl,
+  scoresSourceNote,
+  summarizeScoresSource,
+} from "../utils/formatters.js";
 
 export function registerKeywordGap(server: McpServer) {
   server.tool(
@@ -30,7 +35,7 @@ export function registerKeywordGap(server: McpServer) {
         .describe("Country code"),
     },
     async ({ appId1, appId2, country }) => {
-      const cacheKey = `gap:${appId1}:${appId2}:${country}`;
+      const cacheKey = `gap:${appId1.trim().toLowerCase()}:${appId2.trim().toLowerCase()}:${country.toLowerCase()}`;
       const cached = getFromCache(cacheKey);
       if (cached) {
         return { content: [{ type: "text" as const, text: cached }] };
@@ -90,7 +95,11 @@ export function registerKeywordGap(server: McpServer) {
 
         opportunities.sort((a, b) => b.opportunityScore - a.opportunityScore);
 
+        const scoresSource = summarizeScoresSource(batchScores);
+
         const result = {
+          scoresSource,
+          scoresNote: scoresSourceNote(scoresSource),
           app1: {
             appId: appId1,
             title: app1.title,
@@ -118,7 +127,11 @@ export function registerKeywordGap(server: McpServer) {
         };
 
         const resultText = JSON.stringify(result, null, 2);
-        setCache(cacheKey, resultText, CACHE_TTL.SEARCH_RESULTS);
+        setCache(
+          cacheKey,
+          resultText,
+          scoresCacheTtl(CACHE_TTL.SEARCH_RESULTS, scoresSource)
+        );
 
         return { content: [{ type: "text" as const, text: resultText }] };
       } catch (error: any) {

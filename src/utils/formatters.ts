@@ -59,3 +59,35 @@ export function truncateText(text: string, maxLength: number): string {
   if (text.length <= maxLength) return text;
   return text.slice(0, maxLength - 3) + "...";
 }
+
+// ─── Score source transparency ───
+// The aso package falls back to multi-signal estimates when Apple returns 503.
+// Tools surface where their numbers came from so AI clients can weigh them,
+// and cache estimated results for a shorter time (the fallback retries the
+// real API after 10 minutes, so stale estimates should not outlive it by much).
+
+export type ScoresSourceSummary = "apple" | "estimated" | "mixed";
+
+const ESTIMATED_TTL_CAP = 600; // seconds
+
+export function summarizeScoresSource(
+  items: { source?: string }[]
+): ScoresSourceSummary {
+  const hasApple = items.some((i) => i.source === "apple");
+  const hasEstimated = items.some((i) => i.source === "estimated");
+  if (hasApple && hasEstimated) return "mixed";
+  if (hasEstimated) return "estimated";
+  return "apple";
+}
+
+export function scoresCacheTtl(
+  baseTtl: number,
+  source: ScoresSourceSummary
+): number {
+  return source === "apple" ? baseTtl : Math.min(baseTtl, ESTIMATED_TTL_CAP);
+}
+
+export function scoresSourceNote(source: ScoresSourceSummary): string | undefined {
+  if (source === "apple") return undefined;
+  return "Some or all scores are estimated from App Store search-result signals because the Apple scores API was unavailable. Treat them as approximations.";
+}

@@ -4,7 +4,12 @@ import { suggestKeywords, batchGetScores } from "../data-sources/aso-scoring.js"
 import { getFromCache, setCache } from "../cache/sqlite-cache.js";
 import { CACHE_TTL } from "../utils/constants.js";
 import { calculateOpportunityScore } from "../data-sources/custom-scoring.js";
-import { isHighOpportunity } from "../utils/formatters.js";
+import {
+  isHighOpportunity,
+  scoresCacheTtl,
+  scoresSourceNote,
+  summarizeScoresSource,
+} from "../utils/formatters.js";
 
 export function registerSuggestKeywords(server: McpServer) {
   server.tool(
@@ -33,7 +38,7 @@ export function registerSuggestKeywords(server: McpServer) {
         .describe("Number of keywords to suggest per strategy"),
     },
     async ({ appId, strategy, country, num }) => {
-      const cacheKey = `suggest:${appId}:${strategy}:${country}:${num}`;
+      const cacheKey = `suggest:${appId.trim().toLowerCase()}:${strategy}:${country.toLowerCase()}:${num}`;
       const cached = getFromCache(cacheKey);
       if (cached) {
         return { content: [{ type: "text" as const, text: cached }] };
@@ -75,12 +80,17 @@ export function registerSuggestKeywords(server: McpServer) {
         // Sort by traffic
         scoredKeywords.sort((a, b) => b.traffic - a.traffic);
 
+        const scoresSource = summarizeScoresSource(scoredKeywords);
+
         const result = {
           appId,
           country,
+          scoresSource,
+          scoresNote: scoresSourceNote(scoresSource),
           strategies: allKeywords,
           scoredKeywords,
           totalUniqueKeywords: uniqueKeywords.length,
+          scoredKeywordsCount: scoredKeywords.length,
           topOpportunities: scoredKeywords
             .filter((k) =>
               isHighOpportunity(
@@ -91,7 +101,11 @@ export function registerSuggestKeywords(server: McpServer) {
         };
 
         const resultText = JSON.stringify(result, null, 2);
-        setCache(cacheKey, resultText, CACHE_TTL.SUGGESTIONS);
+        setCache(
+          cacheKey,
+          resultText,
+          scoresCacheTtl(CACHE_TTL.SUGGESTIONS, scoresSource)
+        );
 
         return { content: [{ type: "text" as const, text: resultText }] };
       } catch (error: any) {

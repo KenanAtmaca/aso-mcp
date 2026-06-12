@@ -54,8 +54,17 @@ export async function getRatings(
   );
 }
 
-export async function getSuggestions(term: string): Promise<string[]> {
-  return withRateLimit("app-store-scraper", RL, () =>
-    store.suggest({ term })
+export async function getSuggestions(
+  term: string,
+  country: string = "tr"
+): Promise<string[]> {
+  // app-store-scraper's suggest() returns [{ term: "..." }] objects, not
+  // strings, and supports country via the X-Apple-Store-Front header.
+  // Normalize to plain strings so callers never leak objects into keyword pools.
+  const raw = await withRateLimit("app-store-scraper", RL, () =>
+    store.suggest({ term, country })
   );
+  return (raw ?? [])
+    .map((s: any) => (typeof s === "string" ? s : s?.term || ""))
+    .filter((s: string) => s.length > 0);
 }

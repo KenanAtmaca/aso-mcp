@@ -8,6 +8,8 @@ import {
   formatCompetitionLevel,
   formatTrafficLevel,
   generateRecommendation,
+  scoresCacheTtl,
+  scoresSourceNote,
 } from "../utils/formatters.js";
 
 export function registerSearchKeywords(server: McpServer) {
@@ -34,7 +36,7 @@ export function registerSearchKeywords(server: McpServer) {
         .describe("Number of competitor apps to show"),
     },
     async ({ keyword, country, num }) => {
-      const cacheKey = `search:${keyword}:${country}:${num}`;
+      const cacheKey = `search:${keyword.trim().toLowerCase()}:${country.toLowerCase()}:${num}`;
       const cached = getFromCache(cacheKey);
       if (cached) {
         return { content: [{ type: "text" as const, text: cached }] };
@@ -52,6 +54,8 @@ export function registerSearchKeywords(server: McpServer) {
           scores: {
             traffic: scores.traffic,
             difficulty: scores.difficulty,
+            source: scores.source,
+            note: scoresSourceNote(scores.source),
           },
           topApps: topApps.map((app: any) => ({
             title: app.title,
@@ -70,7 +74,11 @@ export function registerSearchKeywords(server: McpServer) {
         };
 
         const resultText = JSON.stringify(result, null, 2);
-        setCache(cacheKey, resultText, CACHE_TTL.KEYWORD_SCORES);
+        setCache(
+          cacheKey,
+          resultText,
+          scoresCacheTtl(CACHE_TTL.KEYWORD_SCORES, scores.source)
+        );
 
         return { content: [{ type: "text" as const, text: resultText }] };
       } catch (error: any) {

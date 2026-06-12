@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 - **npm:** https://www.npmjs.com/package/aso-mcp
 - **GitHub:** https://github.com/KenanAtmaca/aso-mcp
-- **Version:** 1.2.0
+- **Version:** 1.3.0
 - **Install:** `npm install -g aso-mcp` or `npx aso-mcp`
 
 The server reads its version dynamically from `package.json` at startup (`src/server.ts`), so MCP clients always see the published version without a manual sync step.
@@ -65,7 +65,7 @@ npm publish --access public     # Publish to npm (requires auth token)
 
 - **`src/tools/`**: 19 MCP tool definitions. Each follows the pattern: Zod schema validation (with min/max constraints) → cache lookup → data source calls → format result → cache + return. All return `{ content: [{ type: "text", text: JSON }] }`.
 - **`src/data-sources/`**: Four data adapters:
-  - `app-store.ts`: Wraps `app-store-scraper` (search, app details, reviews, ratings, suggestions, similar apps). All calls go through rate limiter.
+  - `app-store.ts`: Wraps `app-store-scraper` (search, app details, reviews, ratings, suggestions, similar apps). All calls go through rate limiter. `getSuggestions(term, country)` passes the country to Apple's autocomplete (via X-Apple-Store-Front header) and normalizes the scraper's `[{ term }]` object results to plain strings (the scraper does NOT return `string[]` despite older assumptions).
   - `aso-scoring.ts`: Wraps `aso` npm package for traffic/difficulty scores. **Falls back automatically** to custom scoring when the aso package fails after retries. The try/catch is now placed OUTSIDE `withRateLimit` so 503/429 errors trigger the rate limiter's exponential backoff (1s + 2s + 4s) before fallback kicks in. Fallback has a 10-minute retry timer (`ASO_RETRY_INTERVAL_MS`); after 10 minutes the aso package is retried automatically. `batchGetScores()` processes keywords in parallel batches of 5. `fallbackSuggest()` resolves the app's real title before seeding autocomplete (no longer passes bundle IDs literally).
   - `custom-scoring.ts`: Four scoring algorithms (visibility, competitive, opportunity, overall) independent of Apple APIs. `extractTitleKeywords()` uses a Unicode-aware splitter (`[^\p{L}\p{N}]+`) that handles Turkish characters and App Store title symbols (·, ™, ®, ★, +, parens, em/en dashes), filters expanded stop words (app/free/pro/lite/premium/best/top/new + Turkish equivalents), and dedupes plural variants via `dedupeKeywords` + `canonicalKeyword` (trackers → tracker, kurslar → kurs, categories → category).
   - `app-store-connect.ts`: App Store Connect API client. JWT ES256 auth via `jsonwebtoken` with token caching (~18 min reuse, 2 min safety margin). Manages credentials from `~/.aso-mcp/connect-config.json` or env vars (`ASC_ISSUER_ID`, `ASC_KEY_ID`, `ASC_PRIVATE_KEY_PATH`). Reads/writes metadata via App Info Localizations (name + subtitle) and App Store Version Localizations (keywords, description, promotionalText, whatsNew, supportUrl, marketingUrl). Includes `decodeHtmlEntities()` sanitization and editable appInfo selection logic. `getMetadata()` returns `appInfoId` + `versionId` so `updateMetadata()` can reuse them on create paths instead of re-fetching (saves 2 API calls per locale, multiplied across batch updates).
@@ -94,7 +94,9 @@ export function registerToolName(server: McpServer) {
 
 ### Fallback Scoring (multi-signal)
 
-The `aso` npm package often gets 503 from Apple. When this happens (after retries are exhausted), `aso-scoring.ts` automatically switches to fallback mode:
+The `aso` npm package often gets 503 from Apple. When this happens (after retries are exhausted), `aso-scoring.ts` automatically switches to fallback mode.
+
+**Score source transparency:** `getScores` / `batchGetScores` return a `source` field (`"apple"` = real aso package scores, `"estimated"` = fallback). Scoring tools surface a top-level `scoresSource` (`apple` / `estimated` / `mixed`) plus a human-readable `scoresNote`, and cap the cache TTL at 600s when any score is estimated (helpers: `summarizeScoresSource`, `scoresCacheTtl`, `scoresSourceNote` in `formatters.ts`). This stops 1-hour caching of approximations and lets AI clients weigh estimated numbers appropriately.
 
 - **Traffic** (multi-signal hybrid, max 10):
   - Result count signal (0-3): `Math.min(3, results.length / 6.67)`. More results returned = more popular keyword.
@@ -107,6 +109,7 @@ The `aso` npm package often gets 503 from Apple. When this happens (after retrie
 
 The rate limiter (`src/utils/rate-limiter.ts`) includes automatic retry with exponential backoff:
 
+- Token acquisition is serialized per source via a promise chain (`acquireToken`). Without it, N concurrent callers would all observe "no tokens", sleep the same deficit, and fire at once, bursting past the limit. This makes parallel tool internals (Promise.all over keywords/terms) safe.
 - Max 3 retries for retryable errors (429 Too Many Requests, 503 Service Unavailable, ECONNRESET, ETIMEDOUT, ENOTFOUND, EAI_AGAIN).
 - Backoff delays: 1s, 2s, 4s.
 - Non-retryable errors are thrown immediately.
@@ -115,14 +118,16 @@ The rate limiter (`src/utils/rate-limiter.ts`) includes automatic retry with exp
 ### Cache System
 
 - SQLite with WAL mode at `~/.aso-mcp/cache.db`.
-- Max 5000 entries; oldest entries evicted when limit exceeded.
+- Max 5000 entries; oldest entries (by `created_at`, FIFO) evicted when limit exceeded.
 - Size enforcement throttled to once per 100 writes (was per-write before v1.2.0).
 - `deleteCache(pattern)` uses SQL LIKE for selective invalidation (e.g. `connect-metadata:${appId}:%`).
 - `connect_update_metadata` and `connect_batch_update_metadata` automatically invalidate related cache entries after successful writes.
-- Tools that build composite cache keys sort or hash mutable inputs to avoid order-sensitive misses:
+- Estimated (fallback) scores cap the entry TTL at 600s via `scoresCacheTtl`.
+- Tools that build composite cache keys normalize and sort mutable inputs to avoid order/case-sensitive misses:
+  - Keywords, app IDs, and country codes are lowercased + trimmed in cache keys across scoring tools.
   - `discover_keywords` includes `featuresHash` (sorted) + `maxResults`.
   - `generate_aso_brief` includes `featuresHash` + `competitorsHash` + sorted `countriesHash` + `targetAudience`.
-  - `localized_keywords` sorts both keywords and countries.
+  - `localized_keywords`, `optimize_metadata`, and `track_ranking` sort their keyword arrays (and countries where applicable).
 
 ### App Store Connect Integration (Phase 5)
 
@@ -139,7 +144,7 @@ The rate limiter (`src/utils/rate-limiter.ts`) includes automatic retry with exp
 - **Auto-create localizations:** If an App Info Localization or Version Localization doesn't exist for the target locale, it is created via `POST` automatically (e.g. for locales like it, ja, ko, pt-BR, ru that may not have an App Info Localization yet). If it exists, it is updated via `PATCH`.
 - **Editable appInfo selection:** When fetching or creating App Info Localizations, the code fetches all `appInfos` and prefers the editable one (state != `READY_FOR_SALE`). This prevents 409 Conflict errors when creating new localizations on released apps that have both a live and editable appInfo.
 - **Parent ID reuse:** `getMetadata` returns the resolved `appInfoId` and `versionId` (not just the localization IDs). When `updateMetadata` needs to create a new localization, it reuses these parent IDs instead of calling `getAppInfoId` / `getEditableVersionId` again, eliminating redundant `appInfos` and `appStoreVersions` round-trips.
-- **HTML entity sanitization:** All text fields are automatically decoded before sending to the API (`&amp;` → `&`, `&lt;` → `<`, `&gt;` → `>`, `&quot;` → `"`, `&#39;` → `'`). This prevents accidental HTML-encoded characters from being stored in App Store Connect metadata.
+- **HTML entity sanitization:** All text fields are automatically decoded before sending to the API (`&amp;` → `&`, `&lt;` → `<`, `&gt;` → `>`, `&quot;` → `"`, `&#39;` → `'`). `&amp;` is decoded last so inputs like `&amp;lt;` are not double-decoded. This prevents accidental HTML-encoded characters from being stored in App Store Connect metadata.
 - **Cache invalidation:** After successful update, `connect-metadata:` and `connect-localizations:` cache keys for the app are automatically deleted so subsequent reads return fresh data.
 - **Safety:** char limit validation (using `CHAR_LIMITS.TITLE` for name, `CHAR_LIMITS.SUBTITLE` for subtitle) before API call, keywords space warning, PREPARE_FOR_SUBMISSION version requirement, before/after diff output (including name field).
 
@@ -170,7 +175,11 @@ These helpers shape what `discover_keywords`, `generate_aso_brief`, and `analyze
 - **`localized_keywords`**: Countries processed in parallel via `Promise.all`, keywords scored via `batchGetScores`.
 - **`keyword_gap`**: All unique keywords scored in a single `batchGetScores` call instead of sequential loops.
 - **`suggest_keywords`**: All 3 strategies (`category`, `similar`, `competition`) run in parallel when strategy=`all`.
-- **`generate_aso_brief`**: Multi-market scoring runs all countries in parallel via `Promise.all` + `batchGetScores` (was sequential through v1.1.0).
+- **`generate_aso_brief`**: Multi-market scoring runs all countries in parallel via `Promise.all` + `batchGetScores` (was sequential through v1.1.0). Search-term scans, autocomplete fetches, and known-competitor lookups also run in parallel.
+- **`discover_keywords`**: Search-term scans and autocomplete suggestion fetches run in parallel.
+- **`track_ranking`**: All keyword searches run in parallel (rate limiter queues the actual requests).
+- **`analyze_reviews`**: Review pages fetched in parallel; failed pages contribute nothing instead of aborting.
+- **Connect `getMetadata`**: The appInfo chain and the version chain (2 requests each) run in parallel, halving read latency per locale.
 - **`getMetadata` parent ID reuse**: `updateMetadata` skips the second `appInfos` and `appStoreVersions` lookups when creating new localizations, saving 2 API calls per locale (matters for `connect_batch_update_metadata` of up to 40 locales).
 - **JWT caching**: Token reused for ~18 minutes, avoiding expensive ES256 signing on every API request.
 - **Cache size enforcement throttle**: `setCache` only counts rows once per 100 writes.
@@ -200,9 +209,9 @@ All tools enforce input constraints via Zod:
 - Import paths use `.js` extensions (TypeScript Node16 module resolution requirement).
 - External modules `app-store-scraper` and `aso` are CommonJS, declared in `src/types/externals.d.ts`.
 - App Store character limits: Title 30, Subtitle 30, Keyword field 100 (comma-separated, no spaces), Description 4000, Promotional Text 170, What's New 4000.
-- Rate limits: app-store-scraper 20 req/min, aso-scores 10 req/min, app-store-connect 200 req/min.
+- Rate limits: app-store-scraper 20 req/min, aso-scores 10 req/min, app-store-connect 200 req/min. Token acquisition is serialized per source (no concurrent burst past the limit).
 - Retry: 3 attempts with exponential backoff (1s, 2s, 4s) for 429/503/network errors. The `aso-scoring.ts` try/catch is placed OUTSIDE `withRateLimit` so retries actually run before fallback engages.
-- Cache: max 5000 entries, LRU eviction, size enforcement throttled to every 100 writes, selective invalidation via `deleteCache(pattern)`.
+- Cache: max 5000 entries, oldest-first (FIFO) eviction, size enforcement throttled to every 100 writes, selective invalidation via `deleteCache(pattern)`. Estimated-score results capped at 600s TTL.
 - Default country is `"tr"` (Turkey) across all tools.
 - Server handles both `SIGINT` and `SIGTERM` for graceful shutdown.
 - All tool descriptions are in English (including Connect tools).

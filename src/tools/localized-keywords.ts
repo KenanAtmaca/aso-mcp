@@ -5,6 +5,11 @@ import { searchApps } from "../data-sources/app-store.js";
 import { getFromCache, setCache } from "../cache/sqlite-cache.js";
 import { CACHE_TTL } from "../utils/constants.js";
 import { getCountryName } from "../utils/localization.js";
+import {
+  scoresCacheTtl,
+  scoresSourceNote,
+  summarizeScoresSource,
+} from "../utils/formatters.js";
 
 export function registerLocalizedKeywords(server: McpServer) {
   server.tool(
@@ -33,8 +38,14 @@ export function registerLocalizedKeywords(server: McpServer) {
         sourceCountry,
         ...targetCountries.filter((c) => c !== sourceCountry),
       ];
-      const keywordsHash = [...keywords].sort().join(",");
-      const countriesHash = [...allCountries].sort().join(",");
+      const keywordsHash = [...keywords]
+        .map((k) => k.trim().toLowerCase())
+        .sort()
+        .join(",");
+      const countriesHash = [...allCountries]
+        .map((c) => c.toLowerCase())
+        .sort()
+        .join(",");
       const cacheKey = `localized:${keywordsHash}:${countriesHash}`;
       const cached = getFromCache(cacheKey);
       if (cached) {
@@ -56,12 +67,14 @@ export function registerLocalizedKeywords(server: McpServer) {
         }[] = [];
 
         const limitedKeywords = keywords.slice(0, 15);
+        const allScoreItems: { source?: string }[] = [];
 
         // Process all countries in parallel
         const countryResults = await Promise.all(
           allCountries.map(async (country) => {
             // Batch score all keywords for this country
             const scores = await batchGetScores(limitedKeywords, country);
+            allScoreItems.push(...scores);
             const scoreMap = new Map(scores.map((s) => [s.keyword, s]));
 
             // Get top apps for each keyword (parallel within country)
@@ -127,9 +140,13 @@ export function registerLocalizedKeywords(server: McpServer) {
           });
         }
 
+        const scoresSource = summarizeScoresSource(allScoreItems);
+
         const result = {
           sourceCountry,
           targetCountries,
+          scoresSource,
+          scoresNote: scoresSourceNote(scoresSource),
           totalKeywords: keywords.length,
           localizations,
           crossCountryComparison: crossCountry,
@@ -137,7 +154,11 @@ export function registerLocalizedKeywords(server: McpServer) {
         };
 
         const resultText = JSON.stringify(result, null, 2);
-        setCache(cacheKey, resultText, CACHE_TTL.KEYWORD_SCORES);
+        setCache(
+          cacheKey,
+          resultText,
+          scoresCacheTtl(CACHE_TTL.KEYWORD_SCORES, scoresSource)
+        );
 
         return { content: [{ type: "text" as const, text: resultText }] };
       } catch (error: any) {

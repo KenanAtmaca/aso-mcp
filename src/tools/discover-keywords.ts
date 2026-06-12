@@ -1,14 +1,19 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { searchApps, getAppDetails, getSuggestions } from "../data-sources/app-store.js";
-import { getScores, batchGetScores } from "../data-sources/aso-scoring.js";
+import { searchApps, getSuggestions } from "../data-sources/app-store.js";
+import { batchGetScores } from "../data-sources/aso-scoring.js";
 import { getFromCache, setCache } from "../cache/sqlite-cache.js";
 import { CACHE_TTL } from "../utils/constants.js";
 import {
   extractTitleKeywords,
   calculateOpportunityScore,
 } from "../data-sources/custom-scoring.js";
-import { classifyOpportunity, OPPORTUNITY_TIERS } from "../utils/formatters.js";
+import {
+  classifyOpportunity,
+  scoresCacheTtl,
+  scoresSourceNote,
+  summarizeScoresSource,
+} from "../utils/formatters.js";
 
 export function registerDiscoverKeywords(server: McpServer) {
   server.tool(
@@ -59,23 +64,29 @@ export function registerDiscoverKeywords(server: McpServer) {
         const uniqueTerms = [...new Set(searchTerms)];
 
         // ─── 2. Search App Store for each term, collect top apps ───
+        // Terms run in parallel; the rate limiter queues the actual requests.
         const allApps = new Map<string, any>();
         const termAppMap: Record<string, string[]> = {};
 
-        for (const term of uniqueTerms.slice(0, 10)) {
-          try {
-            const apps = await searchApps(term, country, 10);
-            termAppMap[term] = [];
-            for (const app of apps) {
-              const a = app as any;
-              const key = a.appId || String(a.id);
-              if (!allApps.has(key)) {
-                allApps.set(key, a);
-              }
-              termAppMap[term].push(a.title);
+        const termResults = await Promise.all(
+          uniqueTerms.slice(0, 10).map(async (term) => {
+            try {
+              return { term, apps: await searchApps(term, country, 10) };
+            } catch {
+              return { term, apps: [] as any[] };
             }
-          } catch {
-            // continue
+          })
+        );
+        for (const { term, apps } of termResults) {
+          if (apps.length === 0) continue;
+          termAppMap[term] = [];
+          for (const app of apps) {
+            const a = app as any;
+            const key = a.appId || String(a.id);
+            if (!allApps.has(key)) {
+              allApps.set(key, a);
+            }
+            termAppMap[term].push(a.title);
           }
         }
 
@@ -140,23 +151,18 @@ export function registerDiscoverKeywords(server: McpServer) {
           }
         }
 
-        // ─── 5. App Store autocomplete suggestions ───
-        for (const term of uniqueTerms.slice(0, 5)) {
-          try {
-            const suggestions = await getSuggestions(term);
-            if (Array.isArray(suggestions)) {
-              for (const s of suggestions) {
-                const text = typeof s === "string" ? s : (s as any)?.term || "";
-                if (text && !rawKeywords.has(text.toLowerCase())) {
-                  rawKeywords.set(text.toLowerCase(), {
-                    count: 1,
-                    sources: ["autocomplete"],
-                  });
-                }
-              }
-            }
-          } catch {
-            // continue
+        // ─── 5. App Store autocomplete suggestions (parallel, market-specific) ───
+        const suggestionResults = await Promise.all(
+          uniqueTerms
+            .slice(0, 5)
+            .map((term) => getSuggestions(term, country).catch(() => [] as string[]))
+        );
+        for (const text of suggestionResults.flat()) {
+          if (text && !rawKeywords.has(text.toLowerCase())) {
+            rawKeywords.set(text.toLowerCase(), {
+              count: 1,
+              sources: ["autocomplete"],
+            });
           }
         }
 
@@ -224,11 +230,15 @@ export function registerDiscoverKeywords(server: McpServer) {
         const tierA = scoredKeywords.filter((k) => k.tier.startsWith("A"));
         const tierB = scoredKeywords.filter((k) => k.tier.startsWith("B"));
 
+        const scoresSource = summarizeScoresSource(batchScores);
+
         const result = {
           category,
           niche,
           country,
           features,
+          scoresSource,
+          scoresNote: scoresSourceNote(scoresSource),
           totalAppsAnalyzed: allApps.size,
           totalKeywordsFound: scoredKeywords.length,
           summary: {
@@ -266,7 +276,11 @@ export function registerDiscoverKeywords(server: McpServer) {
         };
 
         const resultText = JSON.stringify(result, null, 2);
-        setCache(cacheKey, resultText, CACHE_TTL.KEYWORD_SCORES);
+        setCache(
+          cacheKey,
+          resultText,
+          scoresCacheTtl(CACHE_TTL.KEYWORD_SCORES, scoresSource)
+        );
 
         return { content: [{ type: "text" as const, text: resultText }] };
       } catch (error: any) {

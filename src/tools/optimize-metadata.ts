@@ -5,6 +5,11 @@ import { batchGetScores } from "../data-sources/aso-scoring.js";
 import { getFromCache, setCache } from "../cache/sqlite-cache.js";
 import { CACHE_TTL, CHAR_LIMITS } from "../utils/constants.js";
 import { extractTitleKeywords } from "../data-sources/custom-scoring.js";
+import {
+  scoresCacheTtl,
+  scoresSourceNote,
+  summarizeScoresSource,
+} from "../utils/formatters.js";
 
 export function registerOptimizeMetadata(server: McpServer) {
   server.tool(
@@ -28,7 +33,11 @@ export function registerOptimizeMetadata(server: McpServer) {
         .describe("Country code (tr, us, de, gb, fr...)"),
     },
     async ({ appId, targetKeywords, country }) => {
-      const cacheKey = `metadata:${appId}:${targetKeywords.join(",")}:${country}`;
+      const keywordsHash = [...targetKeywords]
+        .map((k) => k.trim().toLowerCase())
+        .sort()
+        .join(",");
+      const cacheKey = `metadata:${appId.trim().toLowerCase()}:${keywordsHash}:${country.toLowerCase()}`;
       const cached = getFromCache(cacheKey);
       if (cached) {
         return { content: [{ type: "text" as const, text: cached }] };
@@ -42,10 +51,7 @@ export function registerOptimizeMetadata(server: McpServer) {
           string,
           { traffic: number; difficulty: number }
         > = {};
-        const batchResults = await batchGetScores(
-          targetKeywords.slice(0, 15),
-          country
-        );
+        const batchResults = await batchGetScores(targetKeywords, country);
         for (const r of batchResults) {
           keywordScores[r.keyword] = { traffic: r.traffic, difficulty: r.difficulty };
         }
@@ -153,9 +159,13 @@ export function registerOptimizeMetadata(server: McpServer) {
           );
         }
 
+        const scoresSource = summarizeScoresSource(batchResults);
+
         const result = {
           appId,
           country,
+          scoresSource,
+          scoresNote: scoresSourceNote(scoresSource),
           current: {
             title: app.title || "",
             titleLength: (app.title || "").length,
@@ -192,7 +202,11 @@ export function registerOptimizeMetadata(server: McpServer) {
         };
 
         const resultText = JSON.stringify(result, null, 2);
-        setCache(cacheKey, resultText, CACHE_TTL.SEARCH_RESULTS);
+        setCache(
+          cacheKey,
+          resultText,
+          scoresCacheTtl(CACHE_TTL.SEARCH_RESULTS, scoresSource)
+        );
 
         return { content: [{ type: "text" as const, text: resultText }] };
       } catch (error: any) {

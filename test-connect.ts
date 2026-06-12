@@ -65,8 +65,18 @@ async function main() {
     assert(countryToLocale("pt-BR") === "pt-BR", "Should pass through pt-BR");
   });
 
-  await test("countryToLocale — unknown country fallback", async () => {
-    assert(countryToLocale("zz") === "zz", "Unknown country should return as-is");
+  await test("countryToLocale — unknown country throws", async () => {
+    let threw = false;
+    try {
+      countryToLocale("zz");
+    } catch (e: any) {
+      threw = true;
+      assert(
+        e.message.includes("Unknown country code"),
+        "Error should explain the unknown code"
+      );
+    }
+    assert(threw, "Unknown 2-char country code should throw (fail loud)");
   });
 
   await test("localeToCountry — reverse mapping", async () => {

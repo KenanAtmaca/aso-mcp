@@ -10,7 +10,12 @@ import {
   calculateCompetitiveScore,
   calculateOpportunityScore,
 } from "../data-sources/custom-scoring.js";
-import { OPPORTUNITY_TIERS } from "../utils/formatters.js";
+import {
+  OPPORTUNITY_TIERS,
+  scoresCacheTtl,
+  scoresSourceNote,
+  summarizeScoresSource,
+} from "../utils/formatters.js";
 
 /**
  * Greedy-pack keyword candidates into App Store's 100-char comma-separated
@@ -118,38 +123,37 @@ export function registerGenerateAsoBrief(server: McpServer) {
           { traffic: number; difficulty: number; source: string }
         >();
 
-        // Feature and category based search
-        for (const term of searchTerms.slice(0, 8)) {
-          try {
-            const apps = await searchApps(term, primaryCountry, 8);
-            for (const app of apps) {
-              const a = app as any;
-              const kws = extractTitleKeywords(a.title || "");
-              for (const kw of kws) {
-                if (!keywordPool.has(kw)) {
-                  keywordPool.set(kw, { traffic: 0, difficulty: 0, source: "competitor-title" });
-                }
+        // Feature/category searches and autocomplete run in parallel; the
+        // rate limiter queues the actual requests behind the scenes.
+        const [searchResults, suggestionResults] = await Promise.all([
+          Promise.all(
+            searchTerms.slice(0, 8).map((term) =>
+              searchApps(term, primaryCountry, 8).catch(() => [] as any[])
+            )
+          ),
+          Promise.all(
+            features.slice(0, 4).map((term) =>
+              getSuggestions(term, primaryCountry).catch(() => [] as string[])
+            )
+          ),
+        ]);
+
+        for (const apps of searchResults) {
+          for (const app of apps) {
+            const a = app as any;
+            const kws = extractTitleKeywords(a.title || "");
+            for (const kw of kws) {
+              if (!keywordPool.has(kw)) {
+                keywordPool.set(kw, { traffic: 0, difficulty: 0, source: "competitor-title" });
               }
             }
-          } catch {
-            // continue
           }
         }
 
-        // Autocomplete suggestions
-        for (const term of features.slice(0, 4)) {
-          try {
-            const suggestions = await getSuggestions(term);
-            if (Array.isArray(suggestions)) {
-              for (const s of suggestions) {
-                const text = (typeof s === "string" ? s : (s as any)?.term || "").toLowerCase();
-                if (text && !keywordPool.has(text)) {
-                  keywordPool.set(text, { traffic: 0, difficulty: 0, source: "autocomplete" });
-                }
-              }
-            }
-          } catch {
-            // continue
+        for (const s of suggestionResults.flat()) {
+          const text = s.toLowerCase();
+          if (text && !keywordPool.has(text)) {
+            keywordPool.set(text, { traffic: 0, difficulty: 0, source: "autocomplete" });
           }
         }
 
@@ -202,22 +206,23 @@ export function registerGenerateAsoBrief(server: McpServer) {
           titleLength: number;
         }[] = [];
 
-        // Known competitors
-        for (const cId of competitorAppIds.slice(0, 3)) {
-          try {
-            const comp = await getAppDetails(cId, primaryCountry);
-            competitorData.push({
-              title: comp.title || "",
-              subtitle: (comp as any).subtitle || "",
-              developer: comp.developer || "",
-              rating: comp.score || 0,
-              reviews: comp.reviews || 0,
-              titleKeywords: extractTitleKeywords(comp.title || ""),
-              titleLength: (comp.title || "").length,
-            });
-          } catch {
-            // continue
-          }
+        // Known competitors (fetched in parallel)
+        const knownCompetitors = await Promise.all(
+          competitorAppIds
+            .slice(0, 3)
+            .map((cId) => getAppDetails(cId, primaryCountry).catch(() => null))
+        );
+        for (const comp of knownCompetitors) {
+          if (!comp) continue;
+          competitorData.push({
+            title: comp.title || "",
+            subtitle: (comp as any).subtitle || "",
+            developer: comp.developer || "",
+            rating: comp.score || 0,
+            reviews: comp.reviews || 0,
+            titleKeywords: extractTitleKeywords(comp.title || ""),
+            titleLength: (comp.title || "").length,
+          });
         }
 
         // Also add top search results as competitors
@@ -346,6 +351,7 @@ export function registerGenerateAsoBrief(server: McpServer) {
         }
 
         // ─── 5. Multi-market analysis (countries scored in parallel) ───
+        const allMarketScoreItems: { source?: string }[] = [...batchScores];
         const marketAnalysis = await Promise.all(
           countries.map(async (c) => {
             if (c === primaryCountry) {
@@ -365,6 +371,7 @@ export function registerGenerateAsoBrief(server: McpServer) {
               marketTopKws.map((k) => k.keyword),
               c
             );
+            allMarketScoreItems.push(...marketScores);
             const marketScoreMap = new Map(
               marketScores.map((s) => [s.keyword, s])
             );
@@ -388,11 +395,15 @@ export function registerGenerateAsoBrief(server: McpServer) {
         );
 
         // ─── 6. Build brief ───
+        const scoresSource = summarizeScoresSource(allMarketScoreItems);
+
         const result = {
           appName,
           category,
           targetAudience,
           features,
+          scoresSource,
+          scoresNote: scoresSourceNote(scoresSource),
           countries: countries.map((c) => ({ code: c, name: getCountryName(c) })),
           primaryCountry,
 
@@ -467,7 +478,11 @@ export function registerGenerateAsoBrief(server: McpServer) {
         };
 
         const resultText = JSON.stringify(result, null, 2);
-        setCache(cacheKey, resultText, CACHE_TTL.KEYWORD_SCORES);
+        setCache(
+          cacheKey,
+          resultText,
+          scoresCacheTtl(CACHE_TTL.KEYWORD_SCORES, scoresSource)
+        );
 
         return { content: [{ type: "text" as const, text: resultText }] };
       } catch (error: any) {

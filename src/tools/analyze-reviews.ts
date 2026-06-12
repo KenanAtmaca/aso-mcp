@@ -110,7 +110,7 @@ export function registerAnalyzeReviews(server: McpServer) {
         .describe("Number of review pages to fetch (each page ~50 reviews)"),
     },
     async ({ appId, country, pages }) => {
-      const cacheKey = `reviews:${appId}:${country}:${pages}`;
+      const cacheKey = `reviews:${appId.trim().toLowerCase()}:${country.toLowerCase()}:${pages}`;
       const cached = getFromCache(cacheKey);
       if (cached) {
         return { content: [{ type: "text" as const, text: cached }] };
@@ -121,16 +121,13 @@ export function registerAnalyzeReviews(server: McpServer) {
         const app = await getAppDetails(appId, country);
         const numericId = app.id;
 
-        // Fetch reviews
-        const allReviews: any[] = [];
-        for (let page = 1; page <= pages; page++) {
-          try {
-            const pageReviews = await getReviews(numericId, country, page);
-            allReviews.push(...pageReviews);
-          } catch {
-            break; // no more pages
-          }
-        }
+        // Fetch review pages in parallel; missing pages just contribute nothing
+        const pageResults = await Promise.all(
+          Array.from({ length: pages }, (_, i) =>
+            getReviews(numericId, country, i + 1).catch(() => [] as any[])
+          )
+        );
+        const allReviews: any[] = pageResults.flat();
 
         if (allReviews.length === 0) {
           return {

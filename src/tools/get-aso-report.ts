@@ -16,6 +16,11 @@ import {
   calculateOpportunityScore,
   calculateOverallScore,
 } from "../data-sources/custom-scoring.js";
+import {
+  scoresCacheTtl,
+  scoresSourceNote,
+  summarizeScoresSource,
+} from "../utils/formatters.js";
 
 export function registerGetAsoReport(server: McpServer) {
   server.tool(
@@ -40,7 +45,7 @@ export function registerGetAsoReport(server: McpServer) {
         .describe("Number of competitors to analyze"),
     },
     async ({ appId, country, competitors }) => {
-      const cacheKey = `report:${appId}:${country}:${competitors}`;
+      const cacheKey = `report:${appId.trim().toLowerCase()}:${country.toLowerCase()}:${competitors}`;
       const cached = getFromCache(cacheKey);
       if (cached) {
         return { content: [{ type: "text" as const, text: cached }] };
@@ -156,7 +161,11 @@ export function registerGetAsoReport(server: McpServer) {
           (kw) => !titleKeywords.includes(kw)
         );
 
+        const scoresSource = summarizeScoresSource(keywordScores);
+
         const result = {
+          scoresSource,
+          scoresNote: scoresSourceNote(scoresSource),
           app: {
             id: app.id,
             appId: app.appId,
@@ -205,7 +214,11 @@ export function registerGetAsoReport(server: McpServer) {
         };
 
         const resultText = JSON.stringify(result, null, 2);
-        setCache(cacheKey, resultText, CACHE_TTL.APP_DETAILS);
+        setCache(
+          cacheKey,
+          resultText,
+          scoresCacheTtl(CACHE_TTL.APP_DETAILS, scoresSource)
+        );
 
         return { content: [{ type: "text" as const, text: resultText }] };
       } catch (error: any) {

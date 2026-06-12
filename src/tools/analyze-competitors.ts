@@ -8,6 +8,7 @@ import {
   calculateCompetitiveScore,
   extractTitleKeywords,
 } from "../data-sources/custom-scoring.js";
+import { scoresCacheTtl } from "../utils/formatters.js";
 
 export function registerAnalyzeCompetitors(server: McpServer) {
   server.tool(
@@ -29,7 +30,7 @@ export function registerAnalyzeCompetitors(server: McpServer) {
         .describe("Number of competitor apps to analyze"),
     },
     async ({ keyword, country, num }) => {
-      const cacheKey = `competitors:${keyword}:${country}:${num}`;
+      const cacheKey = `competitors:${keyword.trim().toLowerCase()}:${country.toLowerCase()}:${num}`;
       const cached = getFromCache(cacheKey);
       if (cached) {
         return { content: [{ type: "text" as const, text: cached }] };
@@ -122,7 +123,11 @@ export function registerAnalyzeCompetitors(server: McpServer) {
         const competitiveScore = calculateCompetitiveScore(appsWithKeywords);
 
         // Main keyword score
-        let keywordScores = { traffic: 0, difficulty: 0 };
+        let keywordScores: {
+          traffic: number;
+          difficulty: number;
+          source: "apple" | "estimated";
+        } = { traffic: 0, difficulty: 0, source: "estimated" };
         try {
           keywordScores = await getScores(keyword, country);
         } catch {
@@ -148,7 +153,11 @@ export function registerAnalyzeCompetitors(server: McpServer) {
         };
 
         const resultText = JSON.stringify(result, null, 2);
-        setCache(cacheKey, resultText, CACHE_TTL.SEARCH_RESULTS);
+        setCache(
+          cacheKey,
+          resultText,
+          scoresCacheTtl(CACHE_TTL.SEARCH_RESULTS, keywordScores.source)
+        );
 
         return { content: [{ type: "text" as const, text: resultText }] };
       } catch (error: any) {

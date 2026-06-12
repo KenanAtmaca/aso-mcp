@@ -27,7 +27,7 @@ export function registerGetAppDetails(server: McpServer) {
         .describe("Also fetch similar apps"),
     },
     async ({ appId, country, includeSimilar }) => {
-      const cacheKey = `app:${appId}:${country}:${includeSimilar}`;
+      const cacheKey = `app:${appId.trim().toLowerCase()}:${country.toLowerCase()}:${includeSimilar}`;
       const cached = getFromCache(cacheKey);
       if (cached) {
         return { content: [{ type: "text" as const, text: cached }] };

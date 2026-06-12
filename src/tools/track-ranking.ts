@@ -26,58 +26,59 @@ export function registerTrackRanking(server: McpServer) {
         .describe("Country code"),
     },
     async ({ appId, keywords, country }) => {
-      const cacheKey = `ranking:${appId}:${keywords.join(",")}:${country}`;
+      const keywordsHash = [...keywords]
+        .map((k) => k.trim().toLowerCase())
+        .sort()
+        .join(",");
+      const cacheKey = `ranking:${appId.trim().toLowerCase()}:${keywordsHash}:${country.toLowerCase()}`;
       const cached = getFromCache(cacheKey);
       if (cached) {
         return { content: [{ type: "text" as const, text: cached }] };
       }
 
       try {
-        const rankings: {
-          keyword: string;
-          position: number | null;
-          topApp: string;
-          totalResults: number;
-        }[] = [];
-
         const normalizedBundleId = appId.toLowerCase();
         const numericAppId = /^\d+$/.test(appId) ? appId : null;
 
-        for (const keyword of keywords.slice(0, 20)) {
-          try {
-            const results = await searchApps(keyword, country, 100);
+        // Keywords run in parallel; the rate limiter queues the actual
+        // requests, so this is safe and much faster than a sequential loop.
+        const rankings = await Promise.all(
+          keywords.map(async (keyword) => {
+            try {
+              const results = await searchApps(keyword, country, 100);
 
-            // Find the app's position (match by bundle ID or numeric track ID)
-            let position: number | null = null;
-            for (let i = 0; i < results.length; i++) {
-              const result = results[i] as any;
-              const resultBundleId = (result.appId || "").toLowerCase();
-              const resultId = String(result.id || "");
-              const bundleMatch =
-                !!resultBundleId && resultBundleId === normalizedBundleId;
-              const idMatch = !!numericAppId && resultId === numericAppId;
-              if (bundleMatch || idMatch) {
-                position = i + 1;
-                break;
+              // Find the app's position (match by bundle ID or numeric track ID)
+              let position: number | null = null;
+              for (let i = 0; i < results.length; i++) {
+                const result = results[i] as any;
+                const resultBundleId = (result.appId || "").toLowerCase();
+                const resultId = String(result.id || "");
+                const bundleMatch =
+                  !!resultBundleId && resultBundleId === normalizedBundleId;
+                const idMatch = !!numericAppId && resultId === numericAppId;
+                if (bundleMatch || idMatch) {
+                  position = i + 1;
+                  break;
+                }
               }
-            }
 
-            const topResult = results[0] as any;
-            rankings.push({
-              keyword,
-              position,
-              topApp: topResult?.title || "Unknown",
-              totalResults: results.length,
-            });
-          } catch {
-            rankings.push({
-              keyword,
-              position: null,
-              topApp: "Error",
-              totalResults: 0,
-            });
-          }
-        }
+              const topResult = results[0] as any;
+              return {
+                keyword,
+                position,
+                topApp: topResult?.title || "Unknown",
+                totalResults: results.length,
+              };
+            } catch {
+              return {
+                keyword,
+                position: null,
+                topApp: "Error",
+                totalResults: 0,
+              };
+            }
+          })
+        );
 
         // Summary
         const found = rankings.filter((r) => r.position !== null);
